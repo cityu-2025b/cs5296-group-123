@@ -1,0 +1,391 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Template to provision DynamoDB Zero ETL to Amazon OpenSearch with automatic embeddings
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Required Parameters
+        Parameters:
+          - OpenSearchUsername
+          - OpenSearchPassword
+          - OpenSearchIndexName
+    ParameterLabels:
+      OpenSearchUsername:
+        default: OpenSearch domain username
+      OpenSearchPassword:
+        default: OpenSearch domain password
+      OpenSearchIndexName:
+        default: OpenSearch index name
+      BedrockRegion:
+        default: Amazon Bedrock region
+
+Parameters:
+  OpenSearchUsername:
+    AllowedPattern: "^[a-zA-Z0-9]+$"
+    Default: cs52962025
+    Description: opensearch username
+    MaxLength: "25"
+    MinLength: "5"
+    Type: String
+  OpenSearchPassword:
+    AllowedPattern: '(?=^.{8,32}$)((?=.*\d)(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[^A-Za-z0-9])(?=.*[a-z])|(?=.*[^A-Za-z0-9])(?=.*[A-Z])(?=.*[a-z])|(?=.*\d)(?=.*[A-Z])(?=.*[^A-Za-z0-9]))^.*'
+    Description: opensearch password
+    MaxLength: "32"
+    MinLength: "8"
+    NoEcho: "true"
+    Type: String
+    Default: cs52962025!
+  OpenSearchIndexName:
+    Default: cs5296-index
+    Type: String
+    Description: opensearch index name
+  BedrockRegion:
+    Default: us-east-1
+    Type: String
+    Description: aws bedrock region
+    AllowedValues:
+      - us-east-1
+  DynamodbTableArn:
+    Type: String
+    Default: arn:aws:dynamodb:us-east-1:626635444827:table/chunked_knowledge_doc
+
+Resources:
+  # IAM Role for OpenSearch Service to access Amazon Bedrock
+  OpenSearchBedrockRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cs5296-opensearch-bedrock-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: es.amazonaws.com
+            Action: sts:AssumeRole
+          - Effect: Allow
+            Principal:
+              Service: es.aws.internal
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: OpenSearchAccessAIModelPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: arn:aws:bedrock:*::foundation-model/*
+
+  # IAM role for Amazon Lambda to access Amazon OpenSearch and Amazon S3
+  LambdaOpenSearchRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cs5296-lambda-opensearch-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+          - Effect: Allow
+            Principal:
+              Service:
+                - s3.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: "/"
+      Policies:
+        - PolicyName: OSMappingLambdaPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: arn:aws:logs:*:*:*
+              - Effect: Allow
+                Action:
+                  - iam:ListRoles
+                  - iam:PassRole
+                  - iam:GetRole
+                  - iam:CreateRole
+                  - iam:GetRolePolicy
+                  - iam:CreatePolicy
+                  - iam:AttachRolePolicy
+                  - iam:PutRolePolicy
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:DeleteObject
+                  - s3:DeleteBucket
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - "*"
+                Resource: "*"
+
+  # IAM Role for the OpenSearch Ingestion pipeline
+  IngestionPipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cs5296-ingestion-pipeline-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - osis-pipelines.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: PipelineRolePolicies
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - es:DescribeDomain
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - es:ESHttp*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - dynamodb:*
+                Resource:
+                  - !Ref DynamodbTableArn
+                  - !Join ["", [!Ref DynamodbTableArn, "/export/*"]]
+                  - !Join ["", [!Ref DynamodbTableArn, "/stream/*"]]
+              - Effect: Allow
+                Action:
+                  - osis:*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource: !Join ["", [!GetAtt S3BucketMain.Arn, "/*"]]
+
+  # S3 bucket for the Lambda function code and dependencies
+  S3BucketCodeArtifact:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: cs5296-s3-bucket-code-artifact
+
+  # S3 bucket for the OpenSearch Ingestion pipeline
+  S3BucketMain:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: cs5296-s3-bucket-main
+
+  S3BucketStandardIA:
+     Type: "AWS::S3::Bucket"
+     Properties:
+       BucketName: cs5296-s3-bucket-standard-ia
+
+  # S3 bucket for Glacie Flexible Retrieval
+  S3BucketGlacierFlexibleRetrieval:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: cs5296-s3-bucket-glacier-flexible-retrieval
+
+  # S3 bucket for Glacie Flexible Retrieval
+  S3BucketGlacierInstantRetrieval:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: cs5296-s3-bucket-glacier-instant-retrieval
+
+  CommonLambdaLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      LayerName: common-lambda-layer
+      Description: My Lambda Layer
+      Content:
+        S3Bucket: !Ref S3BucketCodeArtifact
+        S3Key: common_lambda_layer.zip
+      CompatibleRuntimes:
+        - python3.12
+
+  S3TieringHandlerLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Handler: "main.lambda_handler"
+      Role: !GetAtt LambdaS3TieringRole.Arn
+      Code:
+        S3Bucket: !Ref S3BucketCodeArtifact
+        S3Key: s3_tiering_handler.zip
+      Runtime: python3.12
+      Timeout: 600
+      Environment:
+        Variables:
+          S3_BUCKET_MAIN: !Ref S3BucketMain
+          S3_STANDARD_IA_BUCKET: !Ref S3BucketStandardIA
+          S3_GLACIER_FLEXIBLE_RETRIEVAL_BUCKET: !Ref S3BucketGlacierFlexibleRetrieval
+          S3_GLACIER_INSTANT_RETRIEVAL_BUCKET: !Ref S3BucketGlacierInstantRetrieval
+
+  S3TieringHandlerEventTriggerRule:
+    Type: AWS::Events::Rule
+    Properties: 
+      Description: "S3TieringHandlerEventTriggerRule"
+      ScheduleExpression: "rate(60 minutes)"
+      State: "ENABLED"
+      Targets: 
+        - 
+          Arn: 
+            Fn::GetAtt: 
+              - "LambdaFunction"
+              - "Arn"
+          Id: "TargetFunctionV1"
+
+  PermissionForEventsToInvokeLambda: 
+    Type: AWS::Lambda::Permission
+    Properties: 
+      FunctionName: !Ref S3TieringHandlerLambda
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: 
+        Fn::GetAtt: 
+          - "S3TieringHandlerEventTriggerRule"
+          - "Arn"
+
+  # Amazon OpenSearch Ingestion Log Group
+  IngestionPipelineLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        !Join ["", ["/aws/vendedlogs/pipelinelogs", ddbaosingestionpipeline]]
+      RetentionInDays: 7
+
+  # Secrets Manager Secret for OpenSearch Domain
+  OpenSearchCredentials:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: OpenSearch username and password
+      SecretString: !Sub '{ "username" : "${OpenSearchUsername}", "password" : "${OpenSearchPassword}" }'
+
+  # Amazon OpenSearch Domain
+  OpenSearchServiceDomain:
+    Type: AWS::OpenSearchService::Domain
+    DeletionPolicy : "Retain"
+    Properties:
+      DomainName: cs5296-general-opensearch
+      AccessPolicies:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: "es:*"
+            Resource: !Sub arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/*/*
+      EngineVersion: "OpenSearch_3.1"
+      ClusterConfig:
+        InstanceType: "t3.small.search"
+        InstanceCount: 1
+      EBSOptions:
+        EBSEnabled: True
+        VolumeSize: 20
+        VolumeType: "gp3"
+      AdvancedSecurityOptions:
+        AnonymousAuthEnabled: False
+        Enabled: True
+        InternalUserDatabaseEnabled: True
+        MasterUserOptions:
+          MasterUserName: !Sub ${OpenSearchUsername}
+          MasterUserPassword: !Sub ${OpenSearchPassword}
+      NodeToNodeEncryptionOptions:
+        Enabled: True
+      EncryptionAtRestOptions:
+        Enabled: True
+        KmsKeyId: alias/aws/es
+      DomainEndpointOptions:
+        EnforceHTTPS: True
+
+  # Lambda function to create OpenSearch Connector for Amazon Bedrock
+  CreateOpenSearchBedrockConnectorLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Handler: "main.lambda_handler"
+      Role: !GetAtt LambdaOpenSearchRole.Arn
+      Code:
+        S3Bucket: !Ref S3BucketCodeArtifact
+        S3Key: amazon_opensearch_bedrock.zip
+      Runtime: python3.10
+      Timeout: 600
+      Environment:
+        Variables:
+          AOS_INDEX_NAME: !Ref OpenSearchIndexName
+          AOS_HOST: !GetAtt OpenSearchServiceDomain.DomainEndpoint
+          AOS_REGION: !Ref AWS::Region
+          AOS_SERVICE: "es"
+          AOS_CREDENTIALS: !Ref OpenSearchCredentials
+          LAMBDA_ROLE: !GetAtt LambdaOpenSearchRole.Arn
+          AOSI_ROLE: !GetAtt IngestionPipelineRole.Arn
+          BEDROCK_ROLE: !GetAtt OpenSearchBedrockRole.Arn
+          BEDROCK_REGION: !Sub ${BedrockRegion}
+          HTTP_HEADERS: '{"Content-Type": "application/json"}'
+
+  IngestionPipeline:
+    Type: "AWS::OSIS::Pipeline"
+    Properties:
+      LogPublishingOptions:
+        IsLoggingEnabled: true
+        CloudWatchLogDestination:
+          LogGroup: !Ref IngestionPipelineLogGroup
+      MinUnits: 3
+      MaxUnits: 9
+      PipelineName: cs5296-ingestion-pipeline
+      PipelineConfigurationBody:
+        Fn::Sub:
+          - "version: '2'\ndynamodb-pipeline:\n  source:\n    dynamodb:\n      acknowledgments: true\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      tables:\n      - table_arn: arn:aws:dynamodb:us-east-1:626635444827:table/chunked_knowledge_doc\n        stream:\n          start_position: LATEST\n        export:\n          S3_BUCKET_MAIN: ${S3_BUCKET_MAIN}\n          s3_prefix: ddb-to-opensearch-export/\n          s3_region: ${REGION}\n  sink:\n  - opensearch:\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      hosts:\n      - ${DOMAIN_NAME}\n      index: ${INDEX_NAME}\n      index_type: custom\n      document_id: \"${!getMetadata(\\\"primary_key\\\")}\"\n      action: \"${!getMetadata(\\\"opensearch_action\\\")}\"\n      document_version: \"${!getMetadata(\\\"document_version\\\")}\"\n      document_version_type: 'external'"
+          - {
+              ROLE_ARN: { "Fn::GetAtt": "IngestionPipelineRole.Arn" },
+              DOMAIN_NAME:
+                {
+                  "Fn::Join":
+                    [
+                      "",
+                      [
+                        "https://",
+                        {
+                          "Fn::GetAtt": OpenSearchServiceDomain.DomainEndpoint,
+                        },
+                      ],
+                    ],
+                },
+              REGION: { "Ref": "AWS::Region" },
+              S3_BUCKET_MAIN: { "Ref": "S3BucketMain" },
+              TABLE_ARN: { "Ref": "DynamodbTableArn" },
+              INDEX_NAME: { "Ref": "OpenSearchIndexName" },
+            }
+
+Outputs:
+
+  S3BucketMainName:
+    Description: Name of the S3 bucket
+    Value: !Ref S3BucketMain
+
+  OpenSearchDomainEndpoint:
+    Description: OpenSearch domain endpoint
+    Value: !GetAtt OpenSearchServiceDomain.DomainEndpoint
+
+  LambdaOpenSearchRoleARN:
+    Description: IAM Role ARN for the OpenSearch Mapping Lambda Function
+    Value: !GetAtt LambdaOpenSearchRole.Arn
+
+  OpenSearchBedrockRoleARN:
+    Description: IAM Role ARN for Amazon OpenSearch to access Amazon Bedrock
+    Value: !GetAtt OpenSearchBedrockRole.Arn
+
+  OpenSearchCredentialsARN:
+    Description: ARN of the Secrets Manager Secret for OpenSearch Domain
+    Value: !Ref OpenSearchCredentials
