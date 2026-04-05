@@ -45,11 +45,37 @@ Parameters:
     Description: aws bedrock region
     AllowedValues:
       - us-east-1
-  DynamodbTableArn:
-    Type: String
-    Default: arn:aws:dynamodb:us-east-1:626635444827:table/chunked_knowledge_doc
-
 Resources:
+  ImageStoreDynamodbTable:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      TableName: image_store
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: "PK"
+          AttributeType: "S"
+        - AttributeName: "SK"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "PK"
+          KeyType: "HASH"
+        - AttributeName: "SK"
+          KeyType: "RANGE"
+  AccessActivityDynamodbTable:
+    Type: "AWS::DynamoDB::Table"
+    Properties:
+      TableName: access_activity
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: "PK"
+          AttributeType: "S"
+        - AttributeName: "SK"
+          AttributeType: "S"
+      KeySchema:
+        - AttributeName: "PK"
+          KeyType: "HASH"
+        - AttributeName: "SK"
+          KeyType: "RANGE"
   # IAM Role for OpenSearch Service to access Amazon Bedrock
   OpenSearchBedrockRole:
     Type: AWS::IAM::Role
@@ -164,9 +190,9 @@ Resources:
                 Action:
                   - dynamodb:*
                 Resource:
-                  - !Ref DynamodbTableArn
-                  - !Join ["", [!Ref DynamodbTableArn, "/export/*"]]
-                  - !Join ["", [!Ref DynamodbTableArn, "/stream/*"]]
+                  - !GetAtt ImageStoreDynamodbTable.Arn
+                  - !Join ["", [!GetAtt ImageStoreDynamodbTable.Arn, "/export/*"]]
+                  - !Join ["", [!GetAtt ImageStoreDynamodbTable.Arn, "/stream/*"]]
               - Effect: Allow
                 Action:
                   - osis:*
@@ -188,6 +214,7 @@ Resources:
     Properties:
       BucketName: cs5296-s3-bucket-main
 
+  # S3 bucket for Standard-IA storage class
   S3BucketStandardIA:
      Type: "AWS::S3::Bucket"
      Properties:
@@ -205,22 +232,80 @@ Resources:
     Properties:
       BucketName: cs5296-s3-bucket-glacier-instant-retrieval
 
+  # Lambda Layer for common dependencies
   CommonLambdaLayer:
     Type: AWS::Lambda::LayerVersion
     Properties:
       LayerName: common-lambda-layer
-      Description: My Lambda Layer
+      Description: Common Lambda Layer
       Content:
         S3Bucket: !Ref S3BucketCodeArtifact
         S3Key: common_lambda_layer.zip
       CompatibleRuntimes:
         - python3.12
 
+  LambdaQueryHandlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cs5296-lambda-main-service-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+
+  QueryHandlerLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Handler: "main.lambda_handler"
+      Role: !GetAtt LambdaQueryHandlerRole.Arn
+      Layers:
+        - !Ref CommonLambdaLayer
+      Code:
+        S3Bucket: !Ref S3BucketCodeArtifact
+        S3Key: main_service_handler.zip
+      Runtime: python3.12
+      Timeout: 600
+      Environment:
+        Variables:
+          S3_BUCKET_MAIN: !Ref S3BucketMain
+          IMAGE_STORE_DYNAMODB_TABLE: !Ref ImageStoreDynamodbTable
+          ACCESS_ACTIVITY_DYNAMODB_TABLE: !Ref AccessActivityDynamodbTable
+
+
+  LambdaS3TieringRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cs5296-lambda-s3-tiering-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+
   S3TieringHandlerLambda:
     Type: "AWS::Lambda::Function"
     Properties:
       Handler: "main.lambda_handler"
       Role: !GetAtt LambdaS3TieringRole.Arn
+      Layers:
+        - !Ref CommonLambdaLayer
       Code:
         S3Bucket: !Ref S3BucketCodeArtifact
         S3Key: s3_tiering_handler.zip
@@ -318,8 +403,8 @@ Resources:
       Role: !GetAtt LambdaOpenSearchRole.Arn
       Code:
         S3Bucket: !Ref S3BucketCodeArtifact
-        S3Key: amazon_opensearch_bedrock.zip
-      Runtime: python3.10
+        S3Key: os_bedrock_connector.zip
+      Runtime: python3.12
       Timeout: 600
       Environment:
         Variables:
@@ -334,6 +419,7 @@ Resources:
           BEDROCK_REGION: !Sub ${BedrockRegion}
           HTTP_HEADERS: '{"Content-Type": "application/json"}'
 
+  # Amazon OpenSearch Ingestion Pipeline
   IngestionPipeline:
     Type: "AWS::OSIS::Pipeline"
     Properties:
@@ -364,28 +450,8 @@ Resources:
                 },
               REGION: { "Ref": "AWS::Region" },
               S3_BUCKET_MAIN: { "Ref": "S3BucketMain" },
-              TABLE_ARN: { "Ref": "DynamodbTableArn" },
+              TABLE_ARN: { "GetAtt": "ImageStoreDynamodbTable.Arn" },
               INDEX_NAME: { "Ref": "OpenSearchIndexName" },
             }
 
-Outputs:
 
-  S3BucketMainName:
-    Description: Name of the S3 bucket
-    Value: !Ref S3BucketMain
-
-  OpenSearchDomainEndpoint:
-    Description: OpenSearch domain endpoint
-    Value: !GetAtt OpenSearchServiceDomain.DomainEndpoint
-
-  LambdaOpenSearchRoleARN:
-    Description: IAM Role ARN for the OpenSearch Mapping Lambda Function
-    Value: !GetAtt LambdaOpenSearchRole.Arn
-
-  OpenSearchBedrockRoleARN:
-    Description: IAM Role ARN for Amazon OpenSearch to access Amazon Bedrock
-    Value: !GetAtt OpenSearchBedrockRole.Arn
-
-  OpenSearchCredentialsARN:
-    Description: ARN of the Secrets Manager Secret for OpenSearch Domain
-    Value: !Ref OpenSearchCredentials
