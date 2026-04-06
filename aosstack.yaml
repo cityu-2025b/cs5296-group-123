@@ -232,6 +232,14 @@ Resources:
     Properties:
       BucketName: cs5296-s3-bucket-glacier-instant-retrieval
 
+  SQSImageProcessingQueue:
+    Type: "AWS::SQS::Queue"
+    Properties:
+      QueueName: cs5296-image-processing-queue
+      VisibilityTimeout: 600
+      MessageRetentionPeriod: 1209600
+      ReceiveMessageWaitTimeSeconds: 20
+
   # Lambda Layer for common dependencies
   CommonLambdaLayer:
     Type: AWS::Lambda::LayerVersion
@@ -261,6 +269,7 @@ Resources:
         - arn:aws:iam::aws:policy/AWSLambda_FullAccess
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
         - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
 
   QueryHandlerLambda:
     Type: "AWS::Lambda::Function"
