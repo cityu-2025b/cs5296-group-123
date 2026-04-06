@@ -427,12 +427,12 @@ Resources:
         IsLoggingEnabled: true
         CloudWatchLogDestination:
           LogGroup: !Ref IngestionPipelineLogGroup
-      MinUnits: 3
-      MaxUnits: 9
+      MinUnits: 1
+      MaxUnits: 3
       PipelineName: cs5296-ingestion-pipeline
       PipelineConfigurationBody:
         Fn::Sub:
-          - "version: '2'\ndynamodb-pipeline:\n  source:\n    dynamodb:\n      acknowledgments: true\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      tables:\n      - table_arn: arn:aws:dynamodb:us-east-1:626635444827:table/chunked_knowledge_doc\n        stream:\n          start_position: LATEST\n        export:\n          S3_BUCKET_MAIN: ${S3_BUCKET_MAIN}\n          s3_prefix: ddb-to-opensearch-export/\n          s3_region: ${REGION}\n  sink:\n  - opensearch:\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      hosts:\n      - ${DOMAIN_NAME}\n      index: ${INDEX_NAME}\n      index_type: custom\n      document_id: \"${!getMetadata(\\\"primary_key\\\")}\"\n      action: \"${!getMetadata(\\\"opensearch_action\\\")}\"\n      document_version: \"${!getMetadata(\\\"document_version\\\")}\"\n      document_version_type: 'external'"
+          - "version: '2'\ndynamodb-pipeline:\n  source:\n    dynamodb:\n      acknowledgments: true\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      tables:\n      - table_arn: ${TABLE_ARN}\n        stream:\n          start_position: LATEST\n        export:\n          S3_BUCKET_MAIN: ${S3_BUCKET_MAIN}\n          s3_prefix: ddb-to-opensearch-export/\n          s3_region: ${REGION}\n  sink:\n  - opensearch:\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      hosts:\n      - ${DOMAIN_NAME}\n      index: ${INDEX_NAME}\n      index_type: custom\n      document_id: \"${!getMetadata(\\\"primary_key\\\")}\"\n      action: \"${!getMetadata(\\\"opensearch_action\\\")}\"\n      document_version: \"${!getMetadata(\\\"document_version\\\")}\"\n      document_version_type: 'external'"
           - {
               ROLE_ARN: { "Fn::GetAtt": "IngestionPipelineRole.Arn" },
               DOMAIN_NAME:
@@ -450,7 +450,7 @@ Resources:
                 },
               REGION: { "Ref": "AWS::Region" },
               S3_BUCKET_MAIN: { "Ref": "S3BucketMain" },
-              TABLE_ARN: { "GetAtt": "ImageStoreDynamodbTable.Arn" },
+              TABLE_ARN: { "Ref": "ImageStoreDynamodbTable" },
               INDEX_NAME: { "Ref": "OpenSearchIndexName" },
             }
 
