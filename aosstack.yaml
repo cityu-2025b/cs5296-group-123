@@ -360,13 +360,6 @@ Resources:
         !Join ["", ["/aws/vendedlogs/pipelinelogs", ddbaosingestionpipeline]]
       RetentionInDays: 7
 
-  # Secrets Manager Secret for OpenSearch Domain
-  OpenSearchCredentials:
-    Type: AWS::SecretsManager::Secret
-    Properties:
-      Description: OpenSearch username and password
-      SecretString: !Sub '{ "username" : "${OpenSearchUsername}", "password" : "${OpenSearchPassword}" }'
-
   # Amazon OpenSearch Domain
   OpenSearchServiceDomain:
     Type: AWS::OpenSearchService::Domain
@@ -421,7 +414,8 @@ Resources:
           AOS_HOST: !GetAtt OpenSearchServiceDomain.DomainEndpoint
           AOS_REGION: !Ref AWS::Region
           AOS_SERVICE: "es"
-          AOS_CREDENTIALS: !Ref OpenSearchCredentials
+          AOS_USERNAME: !Ref OpenSearchUsername
+          AOS_PASSWORD: !Ref OpenSearchPassword
           LAMBDA_ROLE: !GetAtt LambdaOpenSearchRole.Arn
           AOSI_ROLE: !GetAtt IngestionPipelineRole.Arn
           BEDROCK_ROLE: !GetAtt OpenSearchBedrockRole.Arn

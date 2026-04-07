@@ -7,8 +7,9 @@ from requests_aws4auth import AWS4Auth
 
 AOS_INDEX_NAME = os.environ.get('AOS_INDEX_NAME')
 AOS_HOST = os.environ.get('AOS_HOST')
-AOS_CREDENTIALS = os.environ.get('AOS_CREDENTIALS')
 AOS_REGION = os.environ.get('AOS_REGION')
+AOS_USERNAME = os.environ.get('AOS_USERNAME')
+AOS_PASSWORD = os.environ.get('AOS_PASSWORD')
 AWS_SERVICE = os.environ.get('AOS_SERVICE')
 LAMBDA_ROLE = os.environ.get('LAMBDA_ROLE')
 AOSI_ROLE = os.environ.get('AOSI_ROLE')
@@ -17,20 +18,10 @@ BEDROCK_REGION = os.environ.get('BEDROCK_REGION')
 HTTP_HEADERS = json.loads(os.environ.get('HTTP_HEADERS'))
 
 
-def get_aos_secrets():
-    session = boto3.session.Session()
-    client = session.client(
-        service_name='secretsmanager', region_name=AOS_REGION)
-    response = client.get_secret_value(SecretId=AOS_CREDENTIALS)
-    secret_data = json.loads(response['SecretString'])
-    return secret_data
-
-
 def attach_lambda_role_to_admin_user():
 
-    secrets = get_aos_secrets()
-    admin_user = secrets['username']
-    admin_password = secrets['password']
+    admin_user = AOS_USERNAME
+    admin_password = AOS_PASSWORD
 
     url = f'https://{AOS_HOST}/_plugins/_security/api/rolesmapping/all_access'
 

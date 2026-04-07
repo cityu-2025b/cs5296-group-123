@@ -1,5 +1,57 @@
-import json
+import requests
+from requests import Response
+
+from aws_lambda_powertools import Logger, Tracer
+from aws_lambda_powertools.event_handler import APIGatewayRestResolver
+from aws_lambda_powertools.logging import correlation_paths
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from service import opensearch_service, grok_service
+
+app = APIGatewayRestResolver()
 
 
-def lambda_handler(event, context):
-    return json.dumps({"message": "Hello from Lambda!"})
+@app.post("/search-image")
+def search_image() -> Response:
+    # 1. Parse base64 image from request
+    # 2. Call llm to convert image to text
+    # 3. Convert text to vector
+    # 4. Search vector database for similar images
+    # 5. Return results
+
+    event = app.current_event.json_body
+    base64_image = event.get("image")
+
+    if not base64_image:
+        return Response(content="Image is required", status_code=400)
+    
+    grok_response = grok_service.image_to_description(base64_image)
+    
+    opensearch_response = opensearch_service.search_image_by_description(grok_response["description"])
+    
+    response = opensearch_response
+    
+    return response
+
+
+@app.get("/text-search")
+def text_search() -> Response:
+    # 1. Parse query parameter from request
+    # 2. Convert text to vector
+    # 3. Search vector database for similar images
+    # 4. Return results
+    event = app.current_event.query_string_parameters
+    input_text = event.get("inputText")
+
+    if not base64_image:
+        return Response(content="Image is required", status_code=400)
+
+
+    opensearch_response = opensearch_service.search_image_by_description(input_text)
+    
+    response = opensearch_response
+    
+    return response
+
+
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
+    return app.resolve(event, context)
