@@ -7,7 +7,7 @@ processor = BatchProcessor(event_type=EventType.SQS)
 
 
 def record_handler(record):
-    payload: S3Event = json.loads(record["body"])
+    payload: S3Event = json.loads(record["s3"])
     print(f"Processing record with payload: {payload}")
 
 
