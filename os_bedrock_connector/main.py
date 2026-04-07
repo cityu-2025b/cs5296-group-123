@@ -15,7 +15,7 @@ LAMBDA_ROLE = os.environ.get('LAMBDA_ROLE')
 AOSI_ROLE = os.environ.get('AOSI_ROLE')
 BEDROCK_ROLE = os.environ.get('BEDROCK_ROLE')
 BEDROCK_REGION = os.environ.get('BEDROCK_REGION')
-HTTP_HEADERS = json.loads(os.environ.get('HTTP_HEADERS'))
+HTTP_HEADERS = {"Content-Type": "application/json"}
 
 
 def attach_lambda_role_to_admin_user():
