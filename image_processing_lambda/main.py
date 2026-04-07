@@ -92,15 +92,15 @@ def _save_result_to_ddb(bucket: str, key: str, result: dict[str, Any], storage_t
     now_ts = int(datetime.now(timezone.utc).timestamp())
     table.put_item(
         Item={
-            "PK": str(uuid.uuid4()),
-            "S3_BUCKET_NAME": bucket,
-            "S3_FILE_PATH": key,
-            "INITIAL_S3_STORAGE_TIER": storage_tier,
-            "LASTEST_S3_STORAGE_TIER": storage_tier,
-            "DESCRIPTION": result.get("search_text", ""),
-            "IS_SENSITIVE": False,
-            "CREATED_TIME": now_ts,
-            "LAST_ACCESSED_TIME": now_ts,
+            "pk": str(uuid.uuid4()),
+            "s3_bucket_name": bucket,
+            "s3_file_path": key,
+            "initial_s3_storage_tier": storage_tier,
+            "lastest_s3_storage_tier": storage_tier,
+            "description": result.get("search_text", ""),
+            "is_sensitive": False,
+            "created_time": now_ts,
+            "last_accessed_time": now_ts,
         }
     )
 
