@@ -1,8 +1,5 @@
-import requests
-from requests import Response
-
 from aws_lambda_powertools import Logger, Tracer
-from aws_lambda_powertools.event_handler import APIGatewayRestResolver
+from aws_lambda_powertools.event_handler import APIGatewayRestResolver, Response
 from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from service import opensearch_service, grok_service
@@ -22,7 +19,7 @@ def search_image() -> Response:
     base64_image = event.get("image")
 
     if not base64_image:
-        return Response(content="Image is required", status_code=400)
+        return Response(status_code=400, body="Image is required")
     
     grok_response = grok_service.image_to_description(base64_image)
     
@@ -42,10 +39,11 @@ def text_search() -> Response:
     event = app.current_event.query_string_parameters
     input_text = event.get("inputText")
 
-    if not base64_image:
-        return Response(content="Image is required", status_code=400)
+    if not input_text:
+        return Response(status_code=400, body="inputText is required")
 
-
+    # Call Bedrock API to convert image to description
+    # This is a placeholder implementation. Replace with actual API call.
     opensearch_response = opensearch_service.search_image_by_description(input_text)
     
     response = opensearch_response
