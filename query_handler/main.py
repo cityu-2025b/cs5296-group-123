@@ -45,7 +45,6 @@ def text_search() -> Response:
     if not base64_image:
         return Response(content="Image is required", status_code=400)
 
-
     opensearch_response = opensearch_service.search_image_by_description(input_text)
     
     response = opensearch_response
