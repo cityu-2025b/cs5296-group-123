@@ -24,26 +24,9 @@ SYSTEM_PROMPT = (
 
 USER_PROMPT = (
     "Analyze this image and return JSON only. No markdown, no extra text. "
-    "Use this schema exactly:\n"
-    "{\n"
-    "  \"long_description\": string,\n"
-    "  \"short_caption\": string,\n"
-    "  \"vehicle\": {\n"
-    "    \"make\": string,\n"
-    "    \"model_guess\": string,\n"
-    "    \"body_style\": string,\n"
-    "    \"color\": string\n"
-    "  },\n"
-    "  \"scene\": {\n"
-    "    \"environment\": string,\n"
-    "    \"lighting\": string,\n"
-    "    \"camera_view\": string,\n"
-    "    \"motion\": string\n"
-    "  },\n"
-    "  \"visual_attributes\": [string],\n"
-    "  \"query_phrases\": [string]\n"
-    "}\n"
-    "Rules: query_phrases should contain natural user-like search queries such as color + body style + view + scene."
+    "Use this schema exactly: {\"search_text\": string}. "
+    "search_text should be a compact retrieval-friendly line containing visible vehicle identity (if clear), "
+    "body style, color, environment, camera view, and notable visual cues."
 )
 
 
@@ -178,45 +161,13 @@ def _safe_parse_json(text: str) -> dict[str, Any] | None:
     return None
 
 
-def _clean_structured(structured: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not structured:
-        return None
-    cleaned = dict(structured)
-    cleaned.pop("confidence", None)
-    return cleaned
-
-
-def _build_search_text(structured: dict[str, Any], fallback_desc: str) -> str:
-    if not structured:
-        return fallback_desc
-
-    vehicle = structured.get("vehicle", {}) if isinstance(structured.get("vehicle"), dict) else {}
-    scene = structured.get("scene", {}) if isinstance(structured.get("scene"), dict) else {}
-    attrs = structured.get("visual_attributes", [])
-    queries = structured.get("query_phrases", [])
-
-    parts: list[str] = []
-    for value in [
-        structured.get("short_caption"),
-        structured.get("long_description"),
-        vehicle.get("make"),
-        vehicle.get("model_guess"),
-        vehicle.get("body_style"),
-        vehicle.get("color"),
-        scene.get("environment"),
-        scene.get("lighting"),
-        scene.get("camera_view"),
-        scene.get("motion"),
-    ]:
+def _extract_search_text(text: str) -> str:
+    payload = _safe_parse_json(text)
+    if payload:
+        value = payload.get("search_text") or payload.get("description")
         if isinstance(value, str) and value.strip():
-            parts.append(value.strip())
-
-    if isinstance(attrs, list):
-        parts.extend(str(x).strip() for x in attrs if str(x).strip())
-    if isinstance(queries, list):
-        parts.extend(str(x).strip() for x in queries if str(x).strip())
-
-    return " | ".join(parts) if parts else fallback_desc
+            return value.strip()
+    return _extract_json_object(text).strip() or text.strip()
 
 
 def describe_image(model: str, image_path: Path, detail: str) -> dict[str, Any]:
@@ -267,12 +218,10 @@ def _describe_from_data_url(model: str, data_url: str, detail: str) -> dict[str,
     if not raw_desc:
         raw_desc = json.dumps(body, ensure_ascii=False)
 
-    structured = _clean_structured(_safe_parse_json(raw_desc))
-    search_text = _build_search_text(structured or {}, raw_desc)
+    search_text = _extract_search_text(raw_desc)
 
     return {
         "search_text": search_text,
-        "structured": structured,
     }
 
 
@@ -280,7 +229,6 @@ def _append_description_log(output_json: Path, image_name: str, result: dict[str
     records = load_existing_json(output_json)
     records[image_name] = {
         "search_text": result["search_text"],
-        "structured": result["structured"],
     }
     try:
         save_json(output_json, records)
@@ -318,7 +266,6 @@ def run_pipeline(
     return {
         "image": image_path.name,
         "search_text": result["search_text"],
-        "structured": result["structured"],
         "output_json": str(output_json),
     }
 
@@ -353,7 +300,6 @@ def run_pipeline_from_bytes(
     return {
         "image": image_name,
         "search_text": result["search_text"],
-        "structured": result["structured"],
         "output_json": str(output_json),
     }
 

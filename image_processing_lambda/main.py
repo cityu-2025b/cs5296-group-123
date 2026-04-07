@@ -130,18 +130,18 @@ def record_handler(record: dict[str, Any]) -> None:
             detail=XAI_IMAGE_DETAIL,
         )
 
-        _save_result_to_ddb(bucket, key, describe_result, storage_tier)
-
         print(
             json.dumps(
                 {
                     "bucket": bucket,
                     "key": key,
-                    "description_preview": describe_result.get("search_text", "")[:120],
+                    "generated_description": describe_result.get("search_text", ""),
                 },
                 ensure_ascii=False,
             )
         )
+
+        # _save_result_to_ddb(bucket, key, describe_result, storage_tier)
     
 
 
