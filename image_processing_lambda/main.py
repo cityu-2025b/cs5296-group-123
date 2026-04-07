@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -64,30 +65,42 @@ def _extract_s3_entities(payload: dict[str, Any]) -> list[dict[str, str]]:
     return entities
 
 
-def _read_s3_object_bytes(bucket: str, key: str) -> tuple[bytes, str | None]:
+def _normalize_storage_tier(raw_tier: str | None) -> str:
+    if not raw_tier or raw_tier == "STANDARD":
+        return "STANDARD"
+    if raw_tier in {"STANDARD_IA", "ONEZONE_IA", "INTELLIGENT_TIERING"}:
+        return "IA"
+    if "GLACIER" in raw_tier:
+        return "GLACIERS"
+    return raw_tier
+
+
+def _read_s3_object_bytes(bucket: str, key: str) -> tuple[bytes, str | None, str]:
     response = s3_client.get_object(Bucket=bucket, Key=key)
     content_type = response.get("ContentType")
+    storage_tier = _normalize_storage_tier(response.get("StorageClass"))
     body_stream = response["Body"]
     try:
         payload = body_stream.read()
     finally:
         body_stream.close()
-    return payload, content_type
+    return payload, content_type, storage_tier
 
 
-def _save_result_to_ddb(bucket: str, key: str, result: dict[str, Any]) -> None:
+def _save_result_to_ddb(bucket: str, key: str, result: dict[str, Any], storage_tier: str) -> None:
     table = ddb.Table(IMAGE_TABLE_NAME)
-    now = datetime.now(timezone.utc).isoformat()
+    now_ts = int(datetime.now(timezone.utc).timestamp())
     table.put_item(
         Item={
-            "PK": f"IMAGE#{bucket}",
-            "SK": f"OBJECT#{key}",
-            "bucket": bucket,
-            "object_key": key,
-            "name": Path(key).name,
-            "description": result.get("search_text", ""),
-            "structured": result.get("structured"),
-            "processed_at": now,
+            "PK": str(uuid.uuid4()),
+            "S3_BUCKET_NAME": bucket,
+            "S3_FILE_PATH": key,
+            "INITIAL_S3_STORAGE_TIER": storage_tier,
+            "LASTEST_S3_STORAGE_TIER": storage_tier,
+            "DESCRIPTION": result.get("search_text", ""),
+            "IS_SENSITIVE": False,
+            "CREATED_TIME": now_ts,
+            "LAST_ACCESSED_TIME": now_ts,
         }
     )
 
@@ -107,7 +120,7 @@ def record_handler(record: dict[str, Any]) -> None:
             continue
         print(f"Processing s3://{bucket}/{key}")
 
-        image_bytes, content_type = _read_s3_object_bytes(bucket, key)
+        image_bytes, content_type, storage_tier = _read_s3_object_bytes(bucket, key)
         describe_result = run_pipeline_from_bytes(
             image_bytes=image_bytes,
             image_name=Path(key).name,
@@ -117,8 +130,7 @@ def record_handler(record: dict[str, Any]) -> None:
             detail=XAI_IMAGE_DETAIL,
         )
 
-        # DynamoDB persistence is intentionally disabled until table is ready.
-        # _save_result_to_ddb(bucket, key, describe_result)
+        _save_result_to_ddb(bucket, key, describe_result, storage_tier)
 
         print(
             json.dumps(
