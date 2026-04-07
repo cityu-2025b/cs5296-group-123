@@ -46,6 +46,11 @@ Parameters:
     AllowedValues:
       - us-east-1
 Resources:
+  CommonApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: cs5296-common-api
+      Description: API Gateway for common APIs
   ImageStoreDynamodbTable:
     Type: "AWS::DynamoDB::Table"
     Properties:
@@ -192,30 +197,39 @@ Resources:
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-code-artifact
-
   # S3 bucket for the OpenSearch Ingestion pipeline
   S3BucketMain:
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-main
-
+    Tags:
+      - Key: "StorageClass"
+        Value: "Standard"
   # S3 bucket for Standard-IA storage class
   S3BucketStandardIA:
      Type: "AWS::S3::Bucket"
      Properties:
        BucketName: cs5296-s3-bucket-standard-ia
+       Tags:
+         - Key: "StorageClass"
+           Value: "Standard-IA"
 
   # S3 bucket for Glacie Flexible Retrieval
   S3BucketGlacierFlexibleRetrieval:
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-glacier-flexible-retrieval
-
+    Tags:
+      - Key: "StorageClass"
+        Value: "Glacier Flexible Retrieval"
   # S3 bucket for Glacie Instant Retrieval
   S3BucketGlacierInstantRetrieval:
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-glacier-instant-retrieval
+    Tags:
+      - Key: "StorageClass"
+        Value: "Glacier Instant Retrieval"
 
   SQSImageProcessingQueue:
     Type: "AWS::SQS::Queue"
