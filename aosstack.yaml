@@ -225,7 +225,6 @@ Resources:
 
   # S3 bucket for Standard-IA storage class
   S3BucketStandardIA:
-    DeletionPolicy: Retain
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-standard-ia
@@ -242,7 +241,6 @@ Resources:
 
   # S3 bucket for Glacie Flexible Retrieval
   S3BucketGlacierFlexibleRetrieval:
-    DeletionPolicy: Retain
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-glacier-flexible-retrieval
@@ -259,7 +257,6 @@ Resources:
 
   # S3 bucket for Glacie Instant Retrieval
   S3BucketGlacierInstantRetrieval:
-    DeletionPolicy: Retain
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-glacier-instant-retrieval
@@ -293,10 +290,46 @@ Resources:
       CompatibleRuntimes:
         - python3.12
 
+  LambdaImageProcessingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: cs5296-lambda-image-processing-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+
+  ImageProcessingLambda:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Handler: "main.lambda_handler"
+      Role: !GetAtt LambdaImageProcessingRole.Arn
+      Layers:
+        - !Ref CommonLambdaLayer
+      Code:
+        S3Bucket: !Ref S3BucketCodeArtifact
+        S3Key: image_processing.zip
+      Runtime: python3.12
+      Timeout: 900
+      Environment:
+        Variables:     
+          S3_BUCKET_MAIN: !Ref S3BucketMain
+          IMAGE_STORE_DYNAMODB_TABLE: !Ref ImageStoreDynamodbTable
+
   LambdaQueryHandlerRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: cs5296-lambda-main-service-role
+      RoleName: cs5296-lambda-query-handler-role
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -321,7 +354,7 @@ Resources:
         - !Ref CommonLambdaLayer
       Code:
         S3Bucket: !Ref S3BucketCodeArtifact
-        S3Key: main_service_handler.zip
+        S3Key: query_handler.zip
       Runtime: python3.12
       Timeout: 900
       Environment:
@@ -409,7 +442,6 @@ Resources:
   # Amazon OpenSearch Domain
   OpenSearchServiceDomain:
     Type: AWS::OpenSearchService::Domain
-    DeletionPolicy: "Retain"
     Properties:
       DomainName: cs5296-general-opensearch
       AccessPolicies:
