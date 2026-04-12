@@ -206,26 +206,39 @@ Resources:
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-main
+      QueueConfiguration:
+        - Event: "s3:ObjectCreated:*"
+          Queue: !GetAtt SQSImageProcessingQueue.Arn
+          Filter:
+            S3Key:
+              Rules:
+                - Name: suffix
+                  Value: ".jpg"
+                - Name: suffix
+                  Value: ".jpeg"
+                - Name: suffix
+                  Value: ".png"
+
       Tags:
         - Key: "StorageClass"
           Value: "Standard"
 
   # S3 bucket for Standard-IA storage class
   S3BucketStandardIA:
-     DeletionPolicy: Retain
-     Type: "AWS::S3::Bucket"
-     Properties:
-       BucketName: cs5296-s3-bucket-standard-ia
-       LifecycleConfiguration:
+    DeletionPolicy: Retain
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: cs5296-s3-bucket-standard-ia
+      LifecycleConfiguration:
         Rules:
           - Id: StandardIARule
             Status: Enabled
             Transitions:
               - TransitionInDays: 31
                 StorageClass: STANDARD_IA
-       Tags:
-         - Key: "StorageClass"
-           Value: "StandardIA"
+      Tags:
+        - Key: "StorageClass"
+          Value: "StandardIA"
 
   # S3 bucket for Glacie Flexible Retrieval
   S3BucketGlacierFlexibleRetrieval:
@@ -355,17 +368,17 @@ Resources:
 
   S3TieringHandlerEventTriggerRule:
     Type: AWS::Events::Rule
-    Properties: 
+    Properties:
       Name: s3-tiering-handler-event-trigger-rule
       EventBusName: default
       Description: "S3TieringHandlerEventTriggerRule"
       EventPattern: '{"source":["s3-tiering-event"],"detail-type":["s3-tiering-event"]}'
       ScheduleExpression: "rate(10 minutes)"
       State: "ENABLED"
-      Targets: 
+      Targets:
         - Id: "S3TieringHandlerEventTriggerRule"
-          Arn: 
-            Fn::GetAtt: 
+          Arn:
+            Fn::GetAtt:
               - "S3TieringHandlerLambda"
               - "Arn"
           Input: |-
@@ -375,14 +388,14 @@ Resources:
               }
             }
 
-  PermissionForEventsToInvokeLambda: 
+  PermissionForEventsToInvokeLambda:
     Type: AWS::Lambda::Permission
-    Properties: 
+    Properties:
       FunctionName: !Ref S3TieringHandlerLambda
       Action: "lambda:InvokeFunction"
       Principal: "events.amazonaws.com"
-      SourceArn: 
-        Fn::GetAtt: 
+      SourceArn:
+        Fn::GetAtt:
           - "S3TieringHandlerEventTriggerRule"
           - "Arn"
 
@@ -390,14 +403,13 @@ Resources:
   IngestionPipelineLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName:
-        !Join ["", ["/aws/vendedlogs/pipelinelogs", ddbaosingestionpipeline]]
+      LogGroupName: !Join ["", ["/aws/vendedlogs/pipelinelogs", ddbaosingestionpipeline]]
       RetentionInDays: 7
 
   # Amazon OpenSearch Domain
   OpenSearchServiceDomain:
     Type: AWS::OpenSearchService::Domain
-    DeletionPolicy : "Retain"
+    DeletionPolicy: "Retain"
     Properties:
       DomainName: cs5296-general-opensearch
       AccessPolicies:
@@ -469,25 +481,4 @@ Resources:
       PipelineConfigurationBody:
         Fn::Sub:
           - "version: '2'\ndynamodb-pipeline:\n  source:\n    dynamodb:\n      acknowledgments: true\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      tables:\n      - table_arn: ${TABLE_ARN}\n        stream:\n          start_position: LATEST\n        export:\n          S3_BUCKET_MAIN: ${S3_BUCKET_MAIN}\n          s3_prefix: ddb-to-opensearch-export/\n          s3_region: ${REGION}\n  sink:\n  - opensearch:\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      hosts:\n      - ${DOMAIN_NAME}\n      index: ${INDEX_NAME}\n      index_type: custom\n      document_id: \"${!getMetadata(\\\"primary_key\\\")}\"\n      action: \"${!getMetadata(\\\"opensearch_action\\\")}\"\n      document_version: \"${!getMetadata(\\\"document_version\\\")}\"\n      document_version_type: 'external'"
-          - {
-              ROLE_ARN: { "Fn::GetAtt": "IngestionPipelineRole.Arn" },
-              DOMAIN_NAME:
-                {
-                  "Fn::Join":
-                    [
-                      "",
-                      [
-                        "https://",
-                        {
-                          "Fn::GetAtt": OpenSearchServiceDomain.DomainEndpoint,
-                        },
-                      ],
-                    ],
-                },
-              REGION: { "Ref": "AWS::Region" },
-              S3_BUCKET_MAIN: { "Ref": "S3BucketMain" },
-              TABLE_ARN: { "Ref": "ImageStoreDynamodbTable" },
-              INDEX_NAME: { "Ref": "OpenSearchIndexName" },
-            }
-
-
+          - { ROLE_ARN: { "Fn::GetAtt": "IngestionPipelineRole.Arn" }, DOMAIN_NAME: { "Fn::Join": ["", ["https://", { "Fn::GetAtt": OpenSearchServiceDomain.DomainEndpoint }]] }, REGION: { "Ref": "AWS::Region" }, S3_BUCKET_MAIN: { "Ref": "S3BucketMain" }, TABLE_ARN: { "Ref": "ImageStoreDynamodbTable" }, INDEX_NAME: { "Ref": "OpenSearchIndexName" } }
