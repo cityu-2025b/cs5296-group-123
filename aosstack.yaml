@@ -216,6 +216,13 @@ Resources:
      Type: "AWS::S3::Bucket"
      Properties:
        BucketName: cs5296-s3-bucket-standard-ia
+       LifecycleConfiguration:
+        Rules:
+          - Id: StandardIARule
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 31
+                StorageClass: STANDARD_IA
        Tags:
          - Key: "StorageClass"
            Value: "StandardIA"
@@ -226,6 +233,13 @@ Resources:
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-glacier-flexible-retrieval
+      LifecycleConfiguration:
+        Rules:
+          - Id: GlacierFlexibleRetrievalRule
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 0
+                StorageClass: GLACIER
       Tags:
         - Key: "StorageClass"
           Value: "GlacierFlexibleRetrieval"
@@ -236,10 +250,16 @@ Resources:
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-glacier-instant-retrieval
+      LifecycleConfiguration:
+        Rules:
+          - Id: GlacierFlexibleRetrievalRule
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 0
+                StorageClass: GLACIER_IR
       Tags:
         - Key: "StorageClass"
           Value: "GlacierInstantRetrieval"
-
   SQSImageProcessingQueue:
     Type: "AWS::SQS::Queue"
     Properties:
