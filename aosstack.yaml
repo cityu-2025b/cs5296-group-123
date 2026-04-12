@@ -18,11 +18,15 @@ Metadata:
         default: OpenSearch index name
       BedrockRegion:
         default: Amazon Bedrock region
+      ImageStoreDynamodbTableName:
+        default: DynamoDB table for image store
+      ImageStoreDynamodbTableArn:
+        default: ARN for DynamoDB table for image store
 
 Parameters:
   OpenSearchUsername:
     AllowedPattern: "^[a-zA-Z0-9]+$"
-    Default: cs52962025
+    Default: cs52962026
     Description: opensearch username
     MaxLength: "25"
     MinLength: "5"
@@ -34,7 +38,7 @@ Parameters:
     MinLength: "8"
     NoEcho: "true"
     Type: String
-    Default: cs52962025!
+    Default: Cs52962026!
   OpenSearchIndexName:
     Default: cs5296-index
     Type: String
@@ -45,28 +49,41 @@ Parameters:
     Description: aws bedrock region
     AllowedValues:
       - us-east-1
+  S3BucketCodeArtifact:
+    Default: cs5296-s3-bucket-code-artifact
+    Type: String
+    Description: S3 bucket for Lambda code artifacts
+  ImageStoreDynamodbTable:
+    Default: image_store
+    Type: String
+    Description: DynamoDB table name for image store
+  ImageStoreDynamodbTableArn:
+    Default: arn:aws:dynamodb:us-east-1:123456789012:table/image_store
+    Type: String
+    Description: ARN for the DynamoDB table for image store
 Resources:
   CommonApiGateway:
     Type: AWS::ApiGateway::RestApi
     Properties:
       Name: cs5296-common-api
       Description: API Gateway for common APIs
-  ImageStoreDynamodbTable:
-    DeletionPolicy: Retain
-    Type: "AWS::DynamoDB::Table"
-    Properties:
-      TableName: image_store
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: "PK"
-          AttributeType: "S"
-        - AttributeName: "SK"
-          AttributeType: "S"
-      KeySchema:
-        - AttributeName: "PK"
-          KeyType: "HASH"
-        - AttributeName: "SK"
-          KeyType: "RANGE"
+  # ImageStoreDynamodbTable:
+  #   DeletionPolicy: Retain
+  #   UpdateReplacePolicy: Retain
+  #   Type: "AWS::DynamoDB::Table"
+  #   Properties:
+  #     TableName: image_store
+  #     BillingMode: PAY_PER_REQUEST
+  #     AttributeDefinitions:
+  #       - AttributeName: "PK"
+  #         AttributeType: "S"
+  #       - AttributeName: "SK"
+  #         AttributeType: "S"
+  #     KeySchema:
+  #       - AttributeName: "PK"
+  #         KeyType: "HASH"
+  #       - AttributeName: "SK"
+  #         KeyType: "RANGE"
   # IAM Role for OpenSearch Service to access Amazon Bedrock
   OpenSearchBedrockRole:
     Type: AWS::IAM::Role
@@ -181,9 +198,9 @@ Resources:
                 Action:
                   - dynamodb:*
                 Resource:
-                  - !GetAtt ImageStoreDynamodbTable.Arn
-                  - !Join ["", [!GetAtt ImageStoreDynamodbTable.Arn, "/export/*"]]
-                  - !Join ["", [!GetAtt ImageStoreDynamodbTable.Arn, "/stream/*"]]
+                  - !Ref ImageStoreDynamodbTableArn
+                  - !Join ["", [!Ref ImageStoreDynamodbTableArn, "/export/*"]]
+                  - !Join ["", [!Ref ImageStoreDynamodbTableArn, "/stream/*"]]
               - Effect: Allow
                 Action:
                   - osis:*
@@ -194,31 +211,29 @@ Resources:
                 Resource: !Join ["", [!GetAtt S3BucketMain.Arn, "/*"]]
 
   # S3 bucket for the Lambda function code and dependencies
-  S3BucketCodeArtifact:
-    DeletionPolicy: Retain
-    Type: "AWS::S3::Bucket"
-    Properties:
-      BucketName: cs5296-s3-bucket-code-artifact
+  # S3BucketCodeArtifact:
+  #   DeletionPolicy: Retain
+  #   UpdateReplacePolicy: Retain
+  #   Type: "AWS::S3::Bucket"
+  #   Properties:
+  #     BucketName: cs5296-s3-bucket-code-artifact
 
   # S3 bucket for the OpenSearch Ingestion pipeline
   S3BucketMain:
-    DeletionPolicy: Retain
+    DependsOn:
+      - SQSImageProcessingQueue
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-main
-      QueueConfiguration:
-        - Event: "s3:ObjectCreated:*"
-          Queue: !GetAtt SQSImageProcessingQueue.Arn
-          Filter:
-            S3Key:
-              Rules:
-                - Name: suffix
-                  Value: ".jpg"
-                - Name: suffix
-                  Value: ".jpeg"
-                - Name: suffix
-                  Value: ".png"
-
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: "s3:ObjectCreated:*"
+            Queue: !GetAtt SQSImageProcessingQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: ".jpg"
       Tags:
         - Key: "StorageClass"
           Value: "Standard"
@@ -274,10 +289,28 @@ Resources:
     Type: "AWS::SQS::Queue"
     Properties:
       QueueName: cs5296-image-processing-queue
-      VisibilityTimeout: 600
+      VisibilityTimeout: 1200
       MessageRetentionPeriod: 1209600
       ReceiveMessageWaitTimeSeconds: 20
 
+  SQSImageProcessingQueuePolicy:
+    DependsOn:
+      - SQSImageProcessingQueue
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: "*"
+            Action: SQS:SendMessage
+            Resource: "*"
+            Condition:
+              ArnLike:
+                aws:SourceArn: "arn:aws:s3:::*"
+      Queues:
+        - !Ref SQSImageProcessingQueue
   # Lambda Layer for common dependencies
   CommonLambdaLayer:
     Type: AWS::Lambda::LayerVersion
@@ -318,13 +351,21 @@ Resources:
         - !Ref CommonLambdaLayer
       Code:
         S3Bucket: !Ref S3BucketCodeArtifact
-        S3Key: image_processing.zip
+        S3Key: image_processing_lambda.zip
       Runtime: python3.12
       Timeout: 900
       Environment:
         Variables:     
           S3_BUCKET_MAIN: !Ref S3BucketMain
           IMAGE_STORE_DYNAMODB_TABLE: !Ref ImageStoreDynamodbTable
+
+  SQSQueueEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 1
+      EventSourceArn: !GetAtt SQSImageProcessingQueue.Arn
+      FunctionName: !Ref ImageProcessingLambda
+      Enabled: True
 
   LambdaQueryHandlerRole:
     Type: AWS::IAM::Role
@@ -373,12 +414,14 @@ Resources:
             Principal:
               Service:
                 - lambda.amazonaws.com
+                - scheduler.amazonaws.com
             Action:
               - sts:AssumeRole
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/AWSLambda_FullAccess
         - arn:aws:iam::aws:policy/AmazonS3FullAccess
         - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonEventBridgeFullAccess
 
   S3TieringHandlerLambda:
     Type: "AWS::Lambda::Function"
@@ -391,7 +434,7 @@ Resources:
         S3Bucket: !Ref S3BucketCodeArtifact
         S3Key: s3_tiering_handler.zip
       Runtime: python3.12
-      Timeout: 600
+      Timeout: 900
       Environment:
         Variables:
           S3_BUCKET_MAIN: !Ref S3BucketMain
@@ -400,26 +443,18 @@ Resources:
           S3_GLACIER_INSTANT_RETRIEVAL_BUCKET: !Ref S3BucketGlacierInstantRetrieval
 
   S3TieringHandlerEventTriggerRule:
-    Type: AWS::Events::Rule
+    Type: AWS::Scheduler::Schedule
     Properties:
+      Description: "Schedule to trigger S3 tiering Lambda function every hour"
       Name: s3-tiering-handler-event-trigger-rule
-      EventBusName: default
-      Description: "S3TieringHandlerEventTriggerRule"
-      EventPattern: '{"source":["s3-tiering-event"],"detail-type":["s3-tiering-event"]}'
-      ScheduleExpression: "rate(10 minutes)"
-      State: "ENABLED"
-      Targets:
-        - Id: "S3TieringHandlerEventTriggerRule"
-          Arn:
-            Fn::GetAtt:
-              - "S3TieringHandlerLambda"
-              - "Arn"
-          Input: |-
-            {
-              "body": {
-                "action": "cleanup"
-              }
-            }
+      FlexibleTimeWindow:
+        Mode: FLEXIBLE
+        MaximumWindowInMinutes: 15
+      ScheduleExpression: rate(1 hour)
+      State: ENABLED
+      Target: 
+        Arn: !GetAtt S3TieringHandlerLambda.Arn
+        RoleArn: !GetAtt LambdaS3TieringRole.Arn
 
   PermissionForEventsToInvokeLambda:
     Type: AWS::Lambda::Permission
@@ -443,7 +478,7 @@ Resources:
   OpenSearchServiceDomain:
     Type: AWS::OpenSearchService::Domain
     Properties:
-      DomainName: cs5296-general-opensearch
+      DomainName: cs5296-opensearch-2026
       AccessPolicies:
         Version: 2012-10-17
         Statement:
@@ -481,6 +516,8 @@ Resources:
     Properties:
       Handler: "main.lambda_handler"
       Role: !GetAtt LambdaOpenSearchRole.Arn
+      Layers:
+        - !Ref CommonLambdaLayer
       Code:
         S3Bucket: !Ref S3BucketCodeArtifact
         S3Key: os_bedrock_connector.zip
@@ -512,5 +549,5 @@ Resources:
       PipelineName: cs5296-ingestion-pipeline
       PipelineConfigurationBody:
         Fn::Sub:
-          - "version: '2'\ndynamodb-pipeline:\n  source:\n    dynamodb:\n      acknowledgments: true\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      tables:\n      - table_arn: ${TABLE_ARN}\n        stream:\n          start_position: LATEST\n        export:\n          S3_BUCKET_MAIN: ${S3_BUCKET_MAIN}\n          s3_prefix: ddb-to-opensearch-export/\n          s3_region: ${REGION}\n  sink:\n  - opensearch:\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      hosts:\n      - ${DOMAIN_NAME}\n      index: ${INDEX_NAME}\n      index_type: custom\n      document_id: \"${!getMetadata(\\\"primary_key\\\")}\"\n      action: \"${!getMetadata(\\\"opensearch_action\\\")}\"\n      document_version: \"${!getMetadata(\\\"document_version\\\")}\"\n      document_version_type: 'external'"
-          - { ROLE_ARN: { "Fn::GetAtt": "IngestionPipelineRole.Arn" }, DOMAIN_NAME: { "Fn::Join": ["", ["https://", { "Fn::GetAtt": OpenSearchServiceDomain.DomainEndpoint }]] }, REGION: { "Ref": "AWS::Region" }, S3_BUCKET_MAIN: { "Ref": "S3BucketMain" }, TABLE_ARN: { "Ref": "ImageStoreDynamodbTable" }, INDEX_NAME: { "Ref": "OpenSearchIndexName" } }
+          - "version: '2'\ndynamodb-pipeline:\n  source:\n    dynamodb:\n      acknowledgments: true\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      tables:\n      - table_arn: ${TABLE_ARN}\n        stream:\n          start_position: LATEST\n        export:\n          s3_bucket: ${S3_BUCKET_MAIN}\n          s3_prefix: ddb-to-opensearch-export/\n          s3_region: ${REGION}\n  sink:\n  - opensearch:\n      aws:\n        region: ${REGION}\n        sts_role_arn: ${ROLE_ARN}\n      hosts:\n      - ${DOMAIN_NAME}\n      index: ${INDEX_NAME}\n      index_type: custom\n      document_id: \"${!getMetadata(\\\"primary_key\\\")}\"\n      action: \"${!getMetadata(\\\"opensearch_action\\\")}\"\n      document_version: \"${!getMetadata(\\\"document_version\\\")}\"\n      document_version_type: 'external'"
+          - { ROLE_ARN: { "Fn::GetAtt": "IngestionPipelineRole.Arn" }, DOMAIN_NAME: { "Fn::Join": ["", ["https://", { "Fn::GetAtt": OpenSearchServiceDomain.DomainEndpoint }]] }, REGION: { "Ref": "AWS::Region" }, S3_BUCKET_MAIN: { "Ref": "S3BucketMain" }, TABLE_ARN: { "Ref": "ImageStoreDynamodbTableArn" }, INDEX_NAME: { "Ref": "OpenSearchIndexName" } }
