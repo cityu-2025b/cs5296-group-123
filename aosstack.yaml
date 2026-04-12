@@ -52,6 +52,7 @@ Resources:
       Name: cs5296-common-api
       Description: API Gateway for common APIs
   ImageStoreDynamodbTable:
+    DeletionPolicy: Retain
     Type: "AWS::DynamoDB::Table"
     Properties:
       TableName: image_store
@@ -194,42 +195,50 @@ Resources:
 
   # S3 bucket for the Lambda function code and dependencies
   S3BucketCodeArtifact:
+    DeletionPolicy: Retain
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-code-artifact
+
   # S3 bucket for the OpenSearch Ingestion pipeline
   S3BucketMain:
+    DeletionPolicy: Retain
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-main
-    Tags:
-      - Key: "StorageClass"
-        Value: "Standard"
+      Tags:
+        - Key: "StorageClass"
+          Value: "Standard"
+
   # S3 bucket for Standard-IA storage class
   S3BucketStandardIA:
+     DeletionPolicy: Retain
      Type: "AWS::S3::Bucket"
      Properties:
        BucketName: cs5296-s3-bucket-standard-ia
        Tags:
          - Key: "StorageClass"
-           Value: "Standard-IA"
+           Value: "StandardIA"
 
   # S3 bucket for Glacie Flexible Retrieval
   S3BucketGlacierFlexibleRetrieval:
+    DeletionPolicy: Retain
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-glacier-flexible-retrieval
-    Tags:
-      - Key: "StorageClass"
-        Value: "Glacier Flexible Retrieval"
+      Tags:
+        - Key: "StorageClass"
+          Value: "GlacierFlexibleRetrieval"
+
   # S3 bucket for Glacie Instant Retrieval
   S3BucketGlacierInstantRetrieval:
+    DeletionPolicy: Retain
     Type: "AWS::S3::Bucket"
     Properties:
       BucketName: cs5296-s3-bucket-glacier-instant-retrieval
-    Tags:
-      - Key: "StorageClass"
-        Value: "Glacier Instant Retrieval"
+      Tags:
+        - Key: "StorageClass"
+          Value: "GlacierInstantRetrieval"
 
   SQSImageProcessingQueue:
     Type: "AWS::SQS::Queue"
