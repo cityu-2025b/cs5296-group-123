@@ -18,15 +18,26 @@ VALID_DETAILS = {"auto", "low", "high"}
 
 SYSTEM_PROMPT = (
     "You are an automotive vision labeling assistant. "
-    "Generate descriptions optimized for semantic/vector search. "
-    "Be factual, avoid guessing beyond visible evidence, and provide concise normalized attributes."
+    "Generate car-centric descriptions optimized for semantic/vector search. "
+    "Be factual, avoid guessing beyond visible evidence, and prioritize visible vehicle attributes over scene context. "
+    "Think like a car buyer: emphasize features that affect buying decisions and comparison. "
+    "Use stable normalized terms and a consistent field order for reliable retrieval. "
+    "Write for both car experts and non-expert buyers using plain-language aliases."
 )
 
 USER_PROMPT = (
     "Analyze this image and return JSON only. No markdown, no extra text. "
     "Use this schema exactly: {\"search_text\": string}. "
-    "search_text should be a compact retrieval-friendly line containing visible vehicle identity (if clear), "
-    "body style, color, environment, camera view, and notable visual cues."
+    "search_text must be one rich retrieval-friendly line focused on the car first. "
+    "Use this exact slot order: make/model; body style; color; wheels/rims; license plate; visible condition; view angle/state; optional short background. "
+    "Keep total length between 35 and 60 words. "
+    "Use normalized wording like 'alloy wheels' and 'front-three-quarter view'. "
+    "If plate text is unclear, write 'license plate unreadable' and do not guess. "
+    "After core slots, add extra buyer-relevant visible cues when available: door count, roof type, cargo style, tire profile, stance/ground clearance, lighting state, body trim accents, and visible modifications. "
+    "For non-expert search, include plain-language aliases after technical terms when possible, such as 'compact SUV crossover', 'small family SUV', 'higher seating position', or 'city-friendly size'. "
+    "Prefer everyday words for color and condition (for example 'clean', 'no visible damage', 'minor scratches'). "
+    "Background/location terms are optional and capped at 8 words total. "
+    "Never invent non-visible specs such as mileage, year, engine, or drivetrain."
 )
 
 

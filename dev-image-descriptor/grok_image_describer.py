@@ -7,8 +7,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-from xai_sdk import Client
-from xai_sdk.chat import image, system, user
+import requests
 
 
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -20,32 +19,26 @@ VALID_DETAILS = {"auto", "low", "high"}
 
 SYSTEM_PROMPT = (
     "You are an automotive vision labeling assistant. "
-    "Generate descriptions optimized for semantic/vector search. "
-    "Be factual, avoid guessing beyond visible evidence, and provide concise normalized attributes."
+    "Generate car-centric descriptions optimized for semantic/vector search. "
+    "Be factual, avoid guessing beyond visible evidence, and prioritize visible vehicle attributes over scene context. "
+    "Think like a car buyer: emphasize features that affect buying decisions and comparison. "
+    "Use stable normalized terms and a consistent field order for reliable retrieval. "
+    "Write for both car experts and non-expert buyers using plain-language aliases."
 )
 
 USER_PROMPT = (
     "Analyze this image and return JSON only. No markdown, no extra text. "
-    "Use this schema exactly:\n"
-    "{\n"
-    "  \"long_description\": string,\n"
-    "  \"short_caption\": string,\n"
-    "  \"vehicle\": {\n"
-    "    \"make\": string,\n"
-    "    \"model_guess\": string,\n"
-    "    \"body_style\": string,\n"
-    "    \"color\": string\n"
-    "  },\n"
-    "  \"scene\": {\n"
-    "    \"environment\": string,\n"
-    "    \"lighting\": string,\n"
-    "    \"camera_view\": string,\n"
-    "    \"motion\": string\n"
-    "  },\n"
-    "  \"visual_attributes\": [string],\n"
-    "  \"query_phrases\": [string]\n"
-    "}\n"
-    "Rules: query_phrases should contain natural user-like search queries such as color + body style + view + scene."
+    "Use this schema exactly: {\"search_text\": string}. "
+    "search_text must be one rich retrieval-friendly line focused on the car first. "
+    "Use this exact slot order: make/model; body style; color; wheels/rims; license plate; visible condition; view angle/state; optional short background. "
+    "Keep total length between 35 and 60 words. "
+    "Use normalized wording like 'alloy wheels' and 'front-three-quarter view'. "
+    "If plate text is unclear, write 'license plate unreadable' and do not guess. "
+    "After core slots, add extra buyer-relevant visible cues when available: door count, roof type, cargo style, tire profile, stance/ground clearance, lighting state, body trim accents, and visible modifications. "
+    "For non-expert search, include plain-language aliases after technical terms when possible, such as 'compact SUV crossover', 'small family SUV', 'higher seating position', or 'city-friendly size'. "
+    "Prefer everyday words for color and condition (for example 'clean', 'no visible damage', 'minor scratches'). "
+    "Background/location terms are optional and capped at 8 words total. "
+    "Never invent non-visible specs such as mileage, year, engine, or drivetrain."
 )
 
 
@@ -131,25 +124,19 @@ def get_api_host() -> str:
     return parsed.netloc or "api.x.ai"
 
 
+def get_api_base_url() -> str:
+    base_url = os.environ.get("XAI_BASE_URL", "").strip()
+    if base_url:
+        return base_url.rstrip("/")
+    return f"https://{get_api_host()}/v1"
+
+
 def get_timeout_seconds() -> float:
     raw = os.environ.get("XAI_TIMEOUT", "3600").strip()
     try:
         return float(raw)
     except ValueError:
         return 3600.0
-
-
-def resolve_runtime_options(args: argparse.Namespace) -> tuple[Path, Path, str, str]:
-    image_dir_raw = args.image_input or os.environ.get("IMAGE_INPUT") or DEFAULT_IMAGE_INPUT
-    output_json_raw = args.image_output or os.environ.get("IMAGE_OUTPUT") or DEFAULT_IMAGE_OUTPUT
-    model = args.model or os.environ.get("XAI_MODEL") or DEFAULT_MODEL
-    detail = args.detail or os.environ.get("XAI_IMAGE_DETAIL") or DEFAULT_DETAIL
-
-    detail = detail.lower().strip()
-    if detail not in VALID_DETAILS:
-        detail = DEFAULT_DETAIL
-
-    return Path(image_dir_raw).resolve(), Path(output_json_raw).resolve(), model, detail
 
 
 def resolve_images(image_dir: Path, specific_image: str | None, run_all: bool) -> list[Path]:
@@ -204,66 +191,63 @@ def _safe_parse_json(text: str) -> dict[str, Any] | None:
     return None
 
 
-def _clean_structured(structured: dict[str, Any] | None) -> dict[str, Any] | None:
-    if not structured:
-        return None
-    cleaned = dict(structured)
-    cleaned.pop("confidence", None)
-    return cleaned
-
-
-def _build_search_text(structured: dict[str, Any], fallback_desc: str) -> str:
-    if not structured:
-        return fallback_desc
-
-    vehicle = structured.get("vehicle", {}) if isinstance(structured.get("vehicle"), dict) else {}
-    scene = structured.get("scene", {}) if isinstance(structured.get("scene"), dict) else {}
-    attrs = structured.get("visual_attributes", [])
-    queries = structured.get("query_phrases", [])
-
-    parts: list[str] = []
-    for value in [
-        structured.get("short_caption"),
-        structured.get("long_description"),
-        vehicle.get("make"),
-        vehicle.get("model_guess"),
-        vehicle.get("body_style"),
-        vehicle.get("color"),
-        scene.get("environment"),
-        scene.get("lighting"),
-        scene.get("camera_view"),
-        scene.get("motion"),
-    ]:
+def _extract_search_text(text: str) -> str:
+    payload = _safe_parse_json(text)
+    if payload:
+        value = payload.get("search_text") or payload.get("description")
         if isinstance(value, str) and value.strip():
-            parts.append(value.strip())
-
-    if isinstance(attrs, list):
-        parts.extend(str(x).strip() for x in attrs if str(x).strip())
-    if isinstance(queries, list):
-        parts.extend(str(x).strip() for x in queries if str(x).strip())
-
-    return " | ".join(parts) if parts else fallback_desc
+            return value.strip()
+    return _extract_json_object(text).strip() or text.strip()
 
 
-def describe_image(client: Client, model: str, image_path: Path, detail: str) -> dict[str, Any]:
+def describe_image(model: str, image_path: Path, detail: str) -> dict[str, Any]:
     data_url = to_data_url(image_path)
 
-    chat = client.chat.create(model=model)
-    chat.append(system(SYSTEM_PROMPT))
-    chat.append(
-        user(
-            USER_PROMPT,
-            image(data_url, detail=detail),
-        )
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": USER_PROMPT},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": data_url,
+                            "detail": detail,
+                        },
+                    },
+                ],
+            },
+        ],
+    }
+
+    response = requests.post(
+        f"{get_api_base_url()}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {get_api_key()}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=get_timeout_seconds(),
     )
-    response = chat.sample()
-    raw_desc = response.content.strip()
-    structured = _clean_structured(_safe_parse_json(raw_desc))
-    search_text = _build_search_text(structured or {}, raw_desc)
+    response.raise_for_status()
+
+    body = response.json()
+    raw_desc = (
+        body.get("choices", [{}])[0]
+        .get("message", {})
+        .get("content", "")
+        .strip()
+    )
+    if not raw_desc:
+        raw_desc = json.dumps(body, ensure_ascii=False)
+
+    search_text = _extract_search_text(raw_desc)
 
     return {
         "search_text": search_text,
-        "structured": structured,
     }
 
 
@@ -305,16 +289,14 @@ def run_pipeline(
     api_key = get_api_key()
     images = resolve_images(image_dir, image, run_all)
 
-    client = Client(api_key=api_key, api_host=get_api_host(), timeout=get_timeout_seconds())
     records = load_existing_json(output_json)
 
     processed: list[str] = []
     for img_path in images:
         print(f"Processing: {img_path.name}")
-        result = describe_image(client, model_name, img_path, detail_level)
+        result = describe_image(model_name, img_path, detail_level)
         records[img_path.name] = {
             "search_text": result["search_text"],
-            "structured": result["structured"],
         }
         save_json(output_json, records)
         processed.append(img_path.name)
