@@ -16,6 +16,8 @@ s3_client = boto3.client("s3")
 ddb = boto3.resource("dynamodb")
 
 IMAGE_TABLE_NAME = os.environ.get("IMAGE_STORE_DYNAMODB_TABLE", "image_store")
+DDB_PARTITION_KEY_NAME = os.environ.get("IMAGE_STORE_DYNAMODB_PK_NAME", "pk")
+DDB_SORT_KEY_NAME = os.environ.get("IMAGE_STORE_DYNAMODB_SK_NAME", "sk")
 DESCRIPTION_LOG_PATH = os.environ.get("IMAGE_DESCRIPTION_LOG", "/tmp/image_descriptions.json")
 XAI_MODEL = os.environ.get("XAI_MODEL")
 XAI_IMAGE_DETAIL = os.environ.get("XAI_IMAGE_DETAIL")
@@ -90,18 +92,20 @@ def _read_s3_object_bytes(bucket: str, key: str) -> tuple[bytes, str | None, str
 def _save_result_to_ddb(bucket: str, key: str, result: dict[str, Any], storage_tier: str) -> None:
     table = ddb.Table(IMAGE_TABLE_NAME)
     now_ts = int(datetime.now(timezone.utc).timestamp())
+    item = {
+        DDB_PARTITION_KEY_NAME: str(uuid.uuid4()),
+        DDB_SORT_KEY_NAME: f"{bucket}#{key}",
+        "s3_bucket_name": bucket,
+        "s3_file_path": key,
+        "initial_s3_storage_tier": storage_tier,
+        "lastest_s3_storage_tier": storage_tier,
+        "description": result.get("search_text", ""),
+        "is_sensitive": False,
+        "created_time": now_ts,
+        "last_accessed_time": now_ts,
+    }
     table.put_item(
-        Item={
-            "pk": str(uuid.uuid4()),
-            "s3_bucket_name": bucket,
-            "s3_file_path": key,
-            "initial_s3_storage_tier": storage_tier,
-            "lastest_s3_storage_tier": storage_tier,
-            "description": result.get("search_text", ""),
-            "is_sensitive": False,
-            "created_time": now_ts,
-            "last_accessed_time": now_ts,
-        }
+        Item=item
     )
 
 
@@ -141,7 +145,7 @@ def record_handler(record: dict[str, Any]) -> None:
             )
         )
 
-        # _save_result_to_ddb(bucket, key, describe_result, storage_tier)
+        _save_result_to_ddb(bucket, key, describe_result, storage_tier)
     
 
 
