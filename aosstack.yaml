@@ -400,6 +400,9 @@ Resources:
       Timeout: 900
       Environment:
         Variables:
+          AOS_HOST: !Ref AWS::NoValue
+          AOS_USERNAME: !Ref OpenSearchUsername
+          AOS_PASSWORD: !Ref OpenSearchPassword
           S3_BUCKET_MAIN: !Ref S3BucketMain
           IMAGE_STORE_DYNAMODB_TABLE: !Ref ImageStoreDynamodbTable
 
@@ -437,6 +440,9 @@ Resources:
       Timeout: 900
       Environment:
         Variables:
+          AOS_HOST: !Ref AWS::NoValue
+          AOS_USERNAME: !Ref OpenSearchUsername
+          AOS_PASSWORD: !Ref OpenSearchPassword
           S3_BUCKET_MAIN: !Ref S3BucketMain
           S3_STANDARD_IA_BUCKET: !Ref S3BucketStandardIA
           S3_GLACIER_FLEXIBLE_RETRIEVAL_BUCKET: !Ref S3BucketGlacierFlexibleRetrieval
