@@ -1,0 +1,96 @@
+openapi: 3.0.3
+info:
+  title: CS5296 Query API
+  version: 1.0.0
+  description: Search endpoints backed by QueryHandler Lambda through API Gateway.
+servers:
+  - url: https://abn57op5z4.execute-api.us-east-1.amazonaws.com/prod
+paths:
+  /text-search:
+    get:
+      summary: Search by text description
+      parameters:
+        - in: query
+          name: inputText
+          required: true
+          schema:
+            type: string
+          description: User query text, for example red compact suv alloy wheels
+        - in: query
+          name: size
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+          description: Number of results to return
+      responses:
+        "200":
+          description: Ranked OpenSearch hits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /search-image:
+    post:
+      summary: Search by image content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - image
+              properties:
+                image:
+                  type: string
+                  description: Base64-encoded image bytes, no data URI prefix
+                size:
+                  type: integer
+                  minimum: 1
+                  default: 5
+      responses:
+        "200":
+          description: Ranked OpenSearch hits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        error:
+          type: string

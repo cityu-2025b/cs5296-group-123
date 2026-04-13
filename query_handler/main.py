@@ -9,13 +9,30 @@ from service import opensearch_service, grok_service, s3_service
 
 app = APIGatewayRestResolver()
 
+_CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization,x-api-key",
+    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+}
+
 
 def _json_response(status_code: int, payload: Any) -> Response:
     return Response(
         status_code=status_code,
         body=json.dumps(payload, ensure_ascii=False),
         content_type="application/json",
+        headers=_CORS_HEADERS,
     )
+
+
+@app.route("/text-search", method="OPTIONS")
+def options_text_search() -> Any:
+    return _json_response(200, {"ok": True})
+
+
+@app.route("/search-image", method="OPTIONS")
+def options_search_image() -> Any:
+    return _json_response(200, {"ok": True})
 
 
 @app.post("/search-image")
