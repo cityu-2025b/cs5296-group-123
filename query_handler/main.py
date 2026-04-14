@@ -1,4 +1,5 @@
 import json
+import base64
 
 from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver, Response
@@ -23,6 +24,38 @@ def _json_response(status_code: int, payload: Any) -> Response:
         content_type="application/json",
         headers=_CORS_HEADERS,
     )
+
+
+def _format_search_hits(raw_hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    formatted_hits: list[dict[str, Any]] = []
+
+    for hit in raw_hits:
+        source = dict(hit.get("_source") or {})
+        source.pop("description_embedding", None)
+
+        if "image_base64" not in source:
+            bucket = source.get("s3_bucket_name") or source.get("bucket")
+            key = source.get("s3_file_path") or source.get("key")
+
+            if bucket and key:
+                try:
+                    image_bytes = get_s3_image(bucket, key)
+                    source["image_base64"] = base64.b64encode(image_bytes).decode("ascii")
+                except Exception:
+                    source["image_base64"] = None
+            else:
+                source["image_base64"] = None
+
+        formatted_hits.append(
+            {
+                "_index": hit.get("_index"),
+                "_id": hit.get("_id"),
+                "_score": hit.get("_score"),
+                "_source": source,
+            }
+        )
+
+    return formatted_hits
 
 
 @app.route("/text-search", method="OPTIONS")
@@ -53,7 +86,7 @@ def search_image() -> Any:
         grok_response = grok_service.image_to_description(base64_image)
         description = grok_response.get("description", "")
         opensearch_response = opensearch_service.search_image_by_description(description)
-        return _json_response(200, opensearch_response)
+        return _json_response(200, _format_search_hits(opensearch_response))
     except Exception as exc:
         return _json_response(500, {"message": "search-image failed", "error": str(exc)})
 
@@ -84,7 +117,7 @@ def text_search(size: int = 10) -> Any:
         # When AOS_MODEL_ID is configured, this performs neural search.
         # Otherwise it falls back to keyword match search.
         opensearch_response = opensearch_service.search_image_by_description(input_text, size=size)
-        return _json_response(200, opensearch_response)
+        return _json_response(200, _format_search_hits(opensearch_response))
     except Exception as exc:
         return _json_response(500, {"message": "text-search failed", "error": str(exc)})
 
