@@ -218,6 +218,39 @@ Resources:
   #   Properties:
   #     BucketName: cs5296-s3-bucket-code-artifact
 
+  S3BucketWebsiteHosting:
+    Type: "AWS::S3::Bucket"
+    Properties:
+      BucketName: cs5296-s3-bucket-website-hosting
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: error.html
+  S3BucketWebsiteHostingPolicy:
+    DependsOn:
+       - S3BucketWebsiteHosting
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket: !Ref S3BucketWebsiteHosting
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource:
+              Fn::Join:
+                - ''
+                - - 'arn:aws:s3:::'
+                  - !Ref S3BucketWebsiteHosting
+                  - '/*'
   # S3 bucket for the OpenSearch Ingestion pipeline
   S3BucketMain:
     DependsOn:
@@ -289,6 +322,16 @@ Resources:
     Type: "AWS::SQS::Queue"
     Properties:
       QueueName: cs5296-image-processing-queue
+      VisibilityTimeout: 1200
+      MessageRetentionPeriod: 1209600
+      ReceiveMessageWaitTimeSeconds: 20
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt SQSImageProcessingQueueDLQ.Arn
+        maxReceiveCount: 5
+  SQSImageProcessingQueueDLQ:
+    Type: "AWS::SQS::Queue"
+    Properties:
+      QueueName: cs5296-image-processing-queue-dlq
       VisibilityTimeout: 1200
       MessageRetentionPeriod: 1209600
       ReceiveMessageWaitTimeSeconds: 20
