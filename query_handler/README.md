@@ -1,19 +1,15 @@
 # Query Handler API
 
-Two endpoints through API Gateway:
+Two endpoints are exposed through API Gateway:
 
 - GET /text-search
 - POST /search-image
 
-Base URL:
-
-https://abn57op5z4.execute-api.us-east-1.amazonaws.com/prod
+Base URL: https://abn57op5z4.execute-api.us-east-1.amazonaws.com/prod
 
 ## 1) Text Search
 
-Endpoint:
-
-GET /text-search
+Endpoint: GET /text-search
 
 Query parameters:
 
@@ -51,9 +47,7 @@ Validation errors:
 
 ## 2) Image Search
 
-Endpoint:
-
-POST /search-image
+Endpoint: POST /search-image
 
 Request JSON body:
 
@@ -91,10 +85,6 @@ Validation errors:
 
 - Image is required
 
-## OpenAPI file
-
-See openapi.yaml for a machine-readable contract that frontend code generators can use.
-
 ## 3) Direct Browser (Vanilla JavaScript)
 
 Ready-made page in this repo:
@@ -111,4 +101,18 @@ Then visit:
 
 - http://localhost:8080/browser-demo.html
 
+If you start the server from the repo root instead, use:
+
+```bash
+python3 -m http.server 8080 --directory query_handler
+```
+
+Then visit the same URL above. If you started a server from repo root without `--directory query_handler`, use:
+
+- http://localhost:8080/query_handler/browser-demo.html
+
 If your browser blocks local file fetches, use the local server above instead of opening the HTML file directly.
+
+## 4) OpenAPI File
+
+See openapi.yaml for a machine-readable contract that frontend code generators can use.
