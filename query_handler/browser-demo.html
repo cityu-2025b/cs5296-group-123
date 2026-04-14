@@ -239,6 +239,8 @@
 
     <section class="results">
       <div id="status" class="status">Ready.</div>
+      <h3>Request</h3>
+      <pre id="request">(request details will appear here)</pre>
       <div id="list"></div>
       <h3>Raw JSON</h3>
       <pre id="raw">(response will appear here)</pre>
@@ -250,6 +252,7 @@
 
     const statusEl = document.getElementById("status");
     const listEl = document.getElementById("list");
+    const requestEl = document.getElementById("request");
     const rawEl = document.getElementById("raw");
 
     function setStatus(msg, ok = true) {
@@ -287,6 +290,14 @@
       });
     }
 
+    function renderRequest(method, url, body) {
+      requestEl.textContent = JSON.stringify({
+        method,
+        url,
+        body: body ?? null
+      }, null, 2);
+    }
+
     async function toBase64NoPrefix(file) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -302,6 +313,17 @@
 
     async function requestAndRender(url, options = {}) {
       try {
+        const method = options.method || "GET";
+        let bodyPreview = null;
+        if (typeof options.body === "string") {
+          try {
+            bodyPreview = JSON.parse(options.body);
+          } catch {
+            bodyPreview = options.body;
+          }
+        }
+        renderRequest(method, url, bodyPreview);
+
         setStatus("Request in progress...");
         const res = await fetch(url, options);
         const data = await res.json();
