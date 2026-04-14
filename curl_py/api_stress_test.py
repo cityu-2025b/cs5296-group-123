@@ -10,7 +10,6 @@ CONCURRENT_THREADS = 10
 TIMEOUT = 5 # seconds
 
 def send_request(request_id):
-    """Sends a single request and measures the time taken."""
     try:
         start_time = time.perf_counter()
         response = requests.get(TARGET_URL, timeout=TIMEOUT)
@@ -26,7 +25,7 @@ def send_request(request_id):
         return {"id": request_id, "status": "Error", "time": 0, "success": False, "error": str(e)}
 
 def run_stress_test():
-    print(f"🚀 Starting Stress Test: {TOTAL_REQUESTS} requests with {CONCURRENT_THREADS} threads...")
+    print(f"Starting Stress Test: {TOTAL_REQUESTS} requests with {CONCURRENT_THREADS} threads...")
     
     # Run requests concurrently
     with ThreadPoolExecutor(max_workers=CONCURRENT_THREADS) as executor:
