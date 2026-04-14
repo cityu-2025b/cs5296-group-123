@@ -164,6 +164,16 @@
       color: var(--text);
     }
 
+    .result-image {
+      width: 100%;
+      max-height: 260px;
+      object-fit: contain;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.9);
+      margin-bottom: 8px;
+    }
+
     .meta {
       color: var(--muted);
       font-size: 0.84rem;
@@ -241,7 +251,8 @@
       <div id="status" class="status">Ready.</div>
       <h3>Request</h3>
       <pre id="request">(request details will appear here)</pre>
-      <div id="list"></div>
+      <h3>Response</h3>
+      <div id="list"><div class="result-item"><h3>No response yet</h3><div class="meta">Run a search to view formatted response cards.</div></div></div>
       <h3>Raw JSON</h3>
       <pre id="raw">(response will appear here)</pre>
     </section>
@@ -280,22 +291,89 @@
         meta.className = "meta";
         meta.textContent = `index: ${item._index || "-"} | score: ${item._score ?? "-"}`;
 
+        const imageEl = buildResultImage(item._source || {});
+
         const desc = document.createElement("pre");
-        desc.textContent = JSON.stringify(item._source || item, null, 2);
+        const sourceForView = { ...(item._source || item) };
+        if (sourceForView.image_base64) {
+          sourceForView.image_base64 = "(base64 omitted; displayed above)";
+        }
+        desc.textContent = JSON.stringify(sourceForView, null, 2);
 
         card.appendChild(title);
         card.appendChild(meta);
+        if (imageEl) {
+          card.appendChild(imageEl);
+        }
         card.appendChild(desc);
         listEl.appendChild(card);
       });
     }
 
+    function buildResultImage(source) {
+      const imageBase64 = typeof source.image_base64 === "string" ? source.image_base64.trim() : "";
+      if (!imageBase64) {
+        return null;
+      }
+
+      const img = document.createElement("img");
+      img.className = "result-image";
+      img.alt = "Matched image preview";
+      img.loading = "lazy";
+      img.src = imageBase64.startsWith("data:image") ? imageBase64 : `data:image/jpeg;base64,${imageBase64}`;
+      return img;
+    }
+
+    function clearPreviousOutput() {
+      listEl.innerHTML = '<div class="result-item"><h3>No response yet</h3><div class="meta">Run a search to view formatted response cards.</div></div>';
+      rawEl.textContent = "(response will appear here)";
+      requestEl.textContent = "(request details will appear here)";
+    }
+
     function renderRequest(method, url, body) {
+      const displayBody = sanitizeForDisplay(body);
       requestEl.textContent = JSON.stringify({
         method,
         url,
-        body: body ?? null
+        body: displayBody ?? null
       }, null, 2);
+    }
+
+    function summarizeBase64(value) {
+      const text = String(value || "").trim();
+      if (!text) {
+        return text;
+      }
+
+      const raw = text.startsWith("data:image")
+        ? text.slice((text.indexOf(",") + 1) || text.length)
+        : text;
+
+      if (raw.length <= 80) {
+        return raw;
+      }
+
+      return `<base64 length=${raw.length} preview=${raw.slice(0, 24)}...${raw.slice(-16)}>`;
+    }
+
+    function sanitizeForDisplay(value) {
+      if (Array.isArray(value)) {
+        return value.map(sanitizeForDisplay);
+      }
+
+      if (!value || typeof value !== "object") {
+        return value;
+      }
+
+      const out = {};
+      for (const [k, v] of Object.entries(value)) {
+        if ((k === "image" || k === "image_base64") && typeof v === "string") {
+          out[k] = summarizeBase64(v);
+          continue;
+        }
+        out[k] = sanitizeForDisplay(v);
+      }
+      return out;
     }
 
     async function toBase64NoPrefix(file) {
@@ -313,6 +391,7 @@
 
     async function requestAndRender(url, options = {}) {
       try {
+        clearPreviousOutput();
         const method = options.method || "GET";
         let bodyPreview = null;
         if (typeof options.body === "string") {
@@ -327,7 +406,10 @@
         setStatus("Request in progress...");
         const res = await fetch(url, options);
         const data = await res.json();
-        rawEl.textContent = JSON.stringify({ status: res.status, data }, null, 2);
+        rawEl.textContent = JSON.stringify({
+          status: res.status,
+          data: sanitizeForDisplay(data)
+        }, null, 2);
 
         if (!res.ok) {
           setStatus(`Failed with status ${res.status}`, false);
@@ -345,6 +427,7 @@
     }
 
     document.getElementById("runText").addEventListener("click", () => {
+      clearPreviousOutput();
       const inputText = document.getElementById("textInput").value.trim();
       const size = document.getElementById("textSize").value || "5";
 
@@ -358,6 +441,7 @@
     });
 
     document.getElementById("runImage").addEventListener("click", async () => {
+      clearPreviousOutput();
       const file = document.getElementById("imageFile").files[0];
       const size = Number(document.getElementById("imageSize").value || "5");
 
