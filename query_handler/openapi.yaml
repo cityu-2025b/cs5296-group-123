@@ -53,42 +53,7 @@ paths:
         content:
           application/json:
             schema:
-                  $ref: "#/components/schemas/SearchHit"
-              required:
-                - image
-    SearchHit:
-      type: object
-      properties:
-        _index:
-          type: string
-        _id:
-          type: string
-        _score:
-          type: number
-        _source:
-          $ref: "#/components/schemas/SearchHitSource"
-    SearchHitSource:
-      type: object
-      description: Source fields from OpenSearch with embedding removed.
-      properties:
-        s3_bucket_name:
-          type: string
-        s3_file_path:
-          type: string
-        description:
-          type: string
-        image_base64:
-          type: string
-          nullable: true
-          description: Base64-encoded searched image bytes.
-              properties:
-                image:
-                  type: string
-                  description: Base64-encoded image bytes, no data URI prefix
-                size:
-                  type: integer
-                  minimum: 1
-                  default: 5
+              $ref: "#/components/schemas/SearchHit"
       responses:
         "200":
           description: Ranked OpenSearch hits
@@ -119,3 +84,36 @@ components:
           type: string
         error:
           type: string
+    SearchHit:
+      type: object
+      properties:
+        _index:
+          type: string
+        _id:
+          type: string
+        _score:
+          type: number
+        _source:
+          $ref: "#/components/schemas/SearchHitSource"
+    SearchHitSource:
+      type: object
+      description: Source fields from OpenSearch with embedding removed.
+      properties:
+        s3_bucket_name:
+          type: string
+        s3_file_path:
+          type: string
+        description:
+          type: string
+        image_base64:
+          type: string
+          nullable: true
+          description: Base64-encoded searched image bytes.
+          properties:
+            image:
+              type: string
+              description: Base64-encoded image bytes, no data URI prefix
+            size:
+              type: integer
+              minimum: 1
+              default: 5
