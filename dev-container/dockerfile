@@ -1,0 +1,31 @@
+# Use the official Ubuntu 24.04 as a base image
+FROM ubuntu:24.04
+
+# 1. Prevent interactive prompts during installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 2. Update and install Python 3 and pip
+# Note: Ubuntu 24.04 includes Python 3.12 by default
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 3. Create and set the working directory
+WORKDIR /app
+
+# 4. Copy requirements file first to leverage Docker cache
+COPY requirements.txt .
+
+# 5. Install dependencies
+# Using --break-system-packages is often required in newer Ubuntu versions if not using a venv
+RUN pip3 install --no-cache-dir -r requirements.txt --break-system-packages
+
+# 6. Copy the rest of your application code
+COPY . .
+
+# Set the default command to run your script
+CMD ["python3", "main.py"]
