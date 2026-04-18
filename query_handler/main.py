@@ -1,5 +1,6 @@
 import json
 import base64
+from decimal import Decimal
 
 from aws_lambda_powertools import Logger, Tracer
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver, Response
@@ -18,9 +19,14 @@ _CORS_HEADERS = {
 
 
 def _json_response(status_code: int, payload: Any) -> Response:
+    def _json_default(value: Any) -> Any:
+        if isinstance(value, Decimal):
+            return int(value) if value == value.to_integral_value() else float(value)
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
     return Response(
         status_code=status_code,
-        body=json.dumps(payload, ensure_ascii=False),
+        body=json.dumps(payload, ensure_ascii=False, default=_json_default),
         content_type="application/json",
         headers=_CORS_HEADERS,
     )
