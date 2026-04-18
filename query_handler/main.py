@@ -6,7 +6,7 @@ from aws_lambda_powertools.event_handler import APIGatewayRestResolver, Response
 from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from typing import Any
-from service import opensearch_service, grok_service, s3_service
+from service import opensearch_service, grok_service, s3_service, dynamodb_service
 
 app = APIGatewayRestResolver()
 
@@ -58,6 +58,20 @@ def _format_search_hits(raw_hits: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return formatted_hits
 
 
+def _parse_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "n", "off"}:
+        return False
+    return default
+
+
 @app.route("/text-search", method="OPTIONS")
 def options_text_search() -> Any:
     return _json_response(200, {"ok": True})
@@ -99,6 +113,7 @@ def text_search(size: int = 10) -> Any:
     # 4. Return results
     event = app.current_event.query_string_parameters or {}
     input_text = event.get("inputText")
+    use_ddb_description_search = _parse_bool(event.get("useDdbDescriptionSearch"), default=False)
 
     size_raw = event.get("size")
     if size_raw is not None:
@@ -114,6 +129,10 @@ def text_search(size: int = 10) -> Any:
         return _json_response(400, {"message": "inputText is required"})
 
     try:
+        if use_ddb_description_search:
+            ddb_response = dynamodb_service.search_image_by_description(input_text, size=size)
+            return _json_response(200, _format_search_hits(ddb_response))
+
         # When AOS_MODEL_ID is configured, this performs neural search.
         # Otherwise it falls back to keyword match search.
         opensearch_response = opensearch_service.search_image_by_description(input_text, size=size)
