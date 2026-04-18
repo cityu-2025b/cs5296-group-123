@@ -98,14 +98,25 @@ def search_image() -> Any:
 
     event = app.current_event.json_body or {}
     base64_image = event.get("image")
+    size = 5
+    size_raw = event.get("size")
 
     if not base64_image:
         return _json_response(400, {"message": "Image is required"})
 
+    if size_raw is not None:
+        try:
+            size = int(size_raw)
+        except (TypeError, ValueError):
+            return _json_response(400, {"message": "size must be an integer"})
+
+    if size <= 0:
+        return _json_response(400, {"message": "size must be greater than 0"})
+
     try:
         grok_response = grok_service.image_to_description(base64_image)
         description = grok_response.get("description", "")
-        opensearch_response = opensearch_service.search_image_by_description(description)
+        opensearch_response = opensearch_service.search_image_by_description(description, size=size)
         return _json_response(200, _format_search_hits(opensearch_response))
     except Exception as exc:
         return _json_response(500, {"message": "search-image failed", "error": str(exc)})
