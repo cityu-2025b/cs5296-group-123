@@ -26,7 +26,7 @@ def search_image_with_infrequenty_access(storage_class: str, threshold_in_days=5
                 "script": {
                   "source": f"""
                     if (doc['last_accessed_time'].size() == 0) return false;
-                    long diff = new Date().getTime() - doc['last_accessed_time'].value;
+                    long diff = new Date().getTime() / 1000 - doc['last_accessed_time'].value;
                     if (diff > {threshold_in_seconds}L && doc['lastest_s3_storage_tier.keyword'].value != "{storage_class}") return true;
                     return false;
                   """
@@ -69,6 +69,7 @@ def search_image_with_infrequenty_access(storage_class: str, threshold_in_days=5
         body=query_request
     )
     
+    print(response["hits"]["total"]["value"])
     if response["hits"]["total"]["value"] == 0:
         return []
     

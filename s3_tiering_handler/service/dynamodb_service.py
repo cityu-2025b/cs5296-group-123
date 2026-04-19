@@ -2,7 +2,7 @@ import boto3
 from config import DDB_TABLE
 from boto3.dynamodb.conditions import Key, Attr
 
-dynamodb_client = boto3.resource("dynamodb")
+dynamodb_client = boto3.resource("dynamodb", region_name="us-east-1")
 table = dynamodb_client.Table(DDB_TABLE)
 
 def update_ddb_record(pk: str, sk: str, storage_class: str, s3_bucket_name):
