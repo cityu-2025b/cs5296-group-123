@@ -79,6 +79,15 @@
       align-content: start;
     }
 
+    .image-card {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .image-card #runImage {
+      margin-top: auto;
+    }
+
     .card h2 {
       margin: 0;
       font-size: 1.05rem;
@@ -89,6 +98,21 @@
       gap: 6px;
       font-size: 0.92rem;
       color: var(--muted);
+    }
+
+    .check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+
+    .check input {
+      width: 16px;
+      height: 16px;
+      padding: 0;
+      accent-color: var(--accent-2);
     }
 
     input,
@@ -230,10 +254,14 @@
           Result size
           <input id="textSize" type="number" min="1" value="5" />
         </label>
+        <label class="check">
+          <input id="useDdbDescriptionSearch" type="checkbox" />
+          Search from DynamoDB
+        </label>
         <button id="runText" type="button">Run Text Search</button>
       </article>
 
-      <article class="card">
+      <article class="card image-card">
         <h2>Image Search</h2>
         <label>
           Image file
@@ -430,13 +458,14 @@
       clearPreviousOutput();
       const inputText = document.getElementById("textInput").value.trim();
       const size = document.getElementById("textSize").value || "5";
+      const useDdbDescriptionSearch = document.getElementById("useDdbDescriptionSearch").checked;
 
       if (!inputText) {
         setStatus("Please provide query text.", false);
         return;
       }
 
-      const url = `${API_BASE}/text-search?inputText=${encodeURIComponent(inputText)}&size=${encodeURIComponent(size)}`;
+      const url = `${API_BASE}/text-search?inputText=${encodeURIComponent(inputText)}&size=${encodeURIComponent(size)}&useDdbDescriptionSearch=${encodeURIComponent(String(useDdbDescriptionSearch))}`;
       requestAndRender(url);
     });
 
