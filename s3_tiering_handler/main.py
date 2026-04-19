@@ -34,4 +34,4 @@ def lambda_handler(event, context):
         s3_file_name = docs["s3_file_path"]
         s3_service.move_file(docs["s3_bucket_name"], s3_file_name, S3_BUCKET_STANDARD_IA, s3_file_name, "STANDARD", delete_source_file=False)
         dynamodb_service.update_ddb_record(docs['PK'], docs["SK"], storage_class="STANDARD", s3_bucket_name=S3_BUCKET_STANDARD_IA)
-        return
+
