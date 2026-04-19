@@ -267,19 +267,19 @@ def lambda_handler(event, context):
 
     if not ingestion_pipeline(model_id):
         print("Failed to create ingestion pipeline")
-        cfnresponse.send(event, context, cfnresponse.FAILED, {})
+        return {"statusCode": 500, "body": "FAILED"}
 
     if not test_aos_bedrock_connection(model_id):
         print("Failed to test AOS-Bedrock connection")
-        cfnresponse.send(event, context, cfnresponse.FAILED, {})
+        return {"statusCode": 500, "body": "FAILED"}
 
     if not create_knn_index():
         print("Failed to create KNN index")
-        cfnresponse.send(event, context, cfnresponse.FAILED, {})
+        return {"statusCode": 500, "body": "FAILED"}
 
     if not create_test_document():
         print("Failed to create document")
-        cfnresponse.send(event, context, cfnresponse.FAILED, {})
+        return {"statusCode": 500, "body": "FAILED"}
 
     print("Successfully created OpenSearch connector for Bedrock")
-    cfnresponse.send(event, context, cfnresponse.SUCCESS, {})
+    return {"statusCode": 200, "body": "SUCCESS"}
