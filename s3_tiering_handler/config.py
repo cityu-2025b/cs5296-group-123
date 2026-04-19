@@ -1,10 +1,11 @@
 import os
 
-AOS_HOST = os.environ.get('AOS_HOST')
-AOS_USERNAME = os.environ.get('AOS_USERNAME')
-AOS_PASSWORD = os.environ.get('AOS_PASSWORD')
-AOS_INDEX_NAME = os.environ.get("AOS_INDEX_NAME")
-DDB_TABLE = os.environ.get("DDB_TABLE")
-S3_BUCKET_STANDARD_IA = os.environ.get("S3_BUCKET_STANDARD_IA")
-S3_BUCKET_GLACIER_FLEXIBLE_RETRIEVAL = os.environ.get("S3_BUCKET_GLACIER_FLEXIBLE_RETRIEVAL")
-S3_BUCKET_GLACIER_INSTANT_RETRIEVAL = os.environ.get("S3_BUCKET_GLACIER_INSTANT_RETRIEVAL")
+AOS_HOST = "search-cs5296-opensearch-2026-hybyptqds6rdqyjfdwlsesswfq.us-east-1.es.amazonaws.com"
+AOS_USERNAME = "cs52962026"
+AOS_PASSWORD = "Cs52962026!"
+AOS_INDEX_NAME = "cs5296-index"
+DDB_TABLE = "image_store"
+S3_BUCKET_MAIN = "cs5296-s3-bucket-main"
+S3_BUCKET_STANDARD_IA = "cs5296-s3-bucket-standard-ia"
+S3_BUCKET_GLACIER_FLEXIBLE_RETRIEVAL = "cs5296-s3-bucket-glacier-flexible-retrieval"
+S3_BUCKET_GLACIER_INSTANT_RETRIEVAL = "cs5296-s3-bucket-glacier-instant-retrieval"

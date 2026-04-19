@@ -1,5 +1,6 @@
 from requests import Response
 from opensearchpy import OpenSearch
+from datetime import datetime, timezone
 
 from config import  AOS_HOST, AOS_USERNAME, AOS_PASSWORD, AOS_INDEX_NAME
 
@@ -12,8 +13,9 @@ opensearch_client = OpenSearch(
     http_compress=True
 )
 
-def search_image_with_infrequenty_access(storage_class: str, threshold_in_days=5) -> Response:
-    threshold_in_millis_second = threshold_in_days * 24 * 60 * 60 * 1000
+def search_image_with_infrequenty_access(storage_class: str, threshold_in_days=5):
+    threshold_in_seconds = threshold_in_days * 24 * 60 * 60
+    cutoff_epoch_seconds = int(datetime.now(timezone.utc).timestamp()) - threshold_in_seconds
 
     query_request = {
       "query": {
@@ -23,9 +25,9 @@ def search_image_with_infrequenty_access(storage_class: str, threshold_in_days=5
               "script": {
                 "script": {
                   "source": f"""
-                    if (doc['created_time'].size() == 0 || doc['last_accessed_time'].size() == 0) return false;
-                    long diff = doc['last_accessed_time'] - doc['created_time'];
-                    if (diff > {threshold_in_millis_second} && doc['storage_class] != {storage_class}) return true;
+                    if (doc['last_accessed_time'].size() == 0) return false;
+                    long diff = new Date().getTime() - doc['last_accessed_time'].value;
+                    if (diff > {threshold_in_seconds}L && doc['lastest_s3_storage_tier.keyword'].value != "{storage_class}") return true;
                     return false;
                   """
                 }
@@ -37,7 +39,7 @@ def search_image_with_infrequenty_access(storage_class: str, threshold_in_days=5
                   {
                     "range": {
                       "created_time": {
-                        "lte": f"now-{threshold_in_days}d/d"
+                        "lte": cutoff_epoch_seconds
                       }
                     },
                   }
@@ -61,12 +63,15 @@ def search_image_with_infrequenty_access(storage_class: str, threshold_in_days=5
         }
       }
     }
-    
+    print(query_request)
     response = opensearch_client.search(
         index=AOS_INDEX_NAME,
         body=query_request
     )
     
-    result = response["hits"]["hits"]
+    if response["hits"]["total"]["value"] == 0:
+        return []
+    
+    result = [hit["_source"] for hit in response["hits"]["hits"]]
     
     return result
