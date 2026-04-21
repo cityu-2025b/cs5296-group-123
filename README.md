@@ -18,7 +18,8 @@ Project Member:
 
 The architecture is event-driven and serverless, with a main query handler and ingestion pipeline that generates embeddings and indexes them in OpenSearch. An S3 tiering handler moves objects across storage classes based on access patterns to balance performance and cost. The system supports both user queries (text or image) and real-time ingestion of new images with low-latency indexing.
 
-![alt text](image.png)
+<img width="724" height="155" alt="image" src="https://github.com/user-attachments/assets/f7c96714-46a2-45b0-ac03-db73a9b05477" />
+
 
 ## Services Used
 
