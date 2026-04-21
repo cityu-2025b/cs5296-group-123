@@ -69,8 +69,8 @@ The architecture is event-driven and serverless, with a main query handler and i
 ## Prerequisites
 
 - AWS account with permissions for S3, Lambda, OpenSearch, DynamoDB, EventBridge, and Bedrock.
-- Python 3.x for local utilities and tests.
-- k6 for load testing (optional).
+- Python 3.12 or later for local utilities and tests.
+- Better to use venv to install the dependencies.
 
 ## Configuration
 
