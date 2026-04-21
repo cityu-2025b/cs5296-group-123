@@ -96,8 +96,8 @@ Refer to [aosstack.yaml](aosstack.yaml) and the policy files in [policy/](policy
 - Upload images to the ingestion S3 bucket to trigger indexing.
 - Submit text or image queries to the API Gateway endpoint.
 - Retrieve ranked results from OpenSearch-backed search responses.
-
-If you want exact request and response formats, share your API payload examples and I can add them here.
+- Vist the testing enviornnment (website) to use the functions.
+- CURL also ok to query the API Gateway endpoint.
 
 ## Testing
 
